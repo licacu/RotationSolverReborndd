@@ -36,6 +36,9 @@ public sealed class UltimateBard : BardRotation
     [RotationConfig(CombatType.PvE, Name = "Custom Army's Paeon Uptime", Parent = nameof(SongTimings), ParentValue = SongTiming.Custom)]
     public float CustomArmyTime { get; set; } = 36f;
 
+    [RotationConfig(CombatType.PvE, Name = "Only use DOTs on targets with Boss Icon")]
+    public bool OnlyDotBoss { get; set; } = true;
+
     [RotationConfig(CombatType.PvE, Name = "Potion: Use in Opener")]
     public bool UsePotionOpener { get; set; } = true;
 
@@ -76,8 +79,6 @@ public sealed class UltimateBard : BardRotation
     private bool InArmys => Song == Song.Army;
     private bool NoSong => Song == Song.None;
 
-    // Advanced Weaving Logic
-    private static float WeaponTotal => 2.5f; 
     private static float LateWeaveWindow => WeaponTotal * 0.5f;
     private static bool CanLateWeave => (WeaponRemain > 0) && (WeaponRemain <= LateWeaveWindow) && EnoughWeaveTime;
     private static bool EnoughWeaveTime => (WeaponRemain > AnimLock) && WeaponRemain > 0;
@@ -138,7 +139,7 @@ public sealed class UltimateBard : BardRotation
         }
         
         // Attempt to trigger opener at start
-        if (InCombat && CombatTime < 5f && _openerStep == 0 && !IsDummy)
+        if (InCombat && CombatTime < 5f && _openerStep == 0)
         {
             _inOpener = true;
         }
