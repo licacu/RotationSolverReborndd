@@ -136,6 +136,13 @@ public sealed class UltimateBard : BardRotation
         (HasRagingStrikes && HasBattleVoice) || 
         (HasRagingStrikes && !BattleVoicePvE.EnoughLevel);
 
+    // Helper to replace missing GetNearbyEnemies
+    private int CountEnemiesInRange(float range)
+    {
+        if (AllHostileTargets == null) return 0;
+        return AllHostileTargets.Count(t => t.DistanceToPlayer() <= range);
+    }
+
     #endregion
 
     #region Countdown
@@ -210,7 +217,7 @@ public sealed class UltimateBard : BardRotation
 
         // 6. Bloodletter / Rain of Death
         // Prevent overcap (3 charges)
-        bool isAoe = Player.GetNearbyEnemies(5).Count() >= 3;
+        bool isAoe = CountEnemiesInRange(5) >= 3;
         var blAction = isAoe ? RainOfDeathPvE : BloodletterPvE;
         var blCharges = BloodletterPvE.Cooldown.CurrentCharges;
 
