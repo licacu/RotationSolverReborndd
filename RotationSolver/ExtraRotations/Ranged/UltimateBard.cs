@@ -150,7 +150,8 @@ public sealed class UltimateBard : BardRotation
     protected override IAction? CountDownAction(float remainTime)
     {
         // Potion at -1.5s approx to cover opener
-        if (UsePotionOpener && remainTime <= 1.2f && remainTime > 0.5f)
+        // Potion at -2.0s to -0.5s to ensure usage
+        if (UsePotionOpener && remainTime <= 2.0f && remainTime > 0.5f)
         {
             if (UseBurstMedicine(out var act)) return act;
         }
@@ -215,11 +216,14 @@ public sealed class UltimateBard : BardRotation
             }
         }
 
-        // 6. Bloodletter / Rain of Death
+        // 6. Heartbreak Shot / Bloodletter / Rain of Death
         // Prevent overcap (3 charges)
         bool isAoe = CountEnemiesInRange(5) >= 3;
-        var blAction = isAoe ? RainOfDeathPvE : BloodletterPvE;
+        var blAction = isAoe ? RainOfDeathPvE : (HeartbreakShotPvE.EnoughLevel ? HeartbreakShotPvE : BloodletterPvE);
         var blCharges = BloodletterPvE.Cooldown.CurrentCharges;
+
+        // CRITICAL: Dump Heartbreak Shot during Burst
+        if (InBurstMode && blAction.CanUse(out act, usedUp: true)) return true;
 
         if (blAction.CanUse(out act))
         {
@@ -252,11 +256,11 @@ public sealed class UltimateBard : BardRotation
         // Condition: In Wanderers and time is up
         if (MagesBalladPvE.CanUse(out act))
         {
-            if (InWanderers && SongEndAfter(WandRemainTime))
+            if (InWanderers)
             {
-                // Can verify we aren't cutting off a Pitch Perfect here, but EmergencyAbility handles that.
-                // Try to late weave to catch last tick if possible
-                 return true; 
+                // Relaxed Logic: If song < 3s remaining, switch to prevent locking
+                if (SongTime >= (WandTime - 3f)) return true;
+                if (SongEndAfter(WandRemainTime)) return true; 
             }
         }
 
@@ -264,7 +268,12 @@ public sealed class UltimateBard : BardRotation
         // Condition: In Mages and time is up
         if (ArmysPaeonPvE.CanUse(out act))
         {
-            if (InMages && SongEndAfter(MageRemainTime)) return true;
+            if (InMages)
+            {
+                 // Relaxed Logic: If song < 3s remaining, switch
+                 if (SongTime >= (MageTime - 3f)) return true;
+                 if (SongEndAfter(MageRemainTime)) return true;
+            }
         }
 
         return base.GeneralAbility(nextGCD, out act);
@@ -330,12 +339,17 @@ public sealed class UltimateBard : BardRotation
 
     protected override bool GeneralGCD(out IAction? act)
     {
-        // 1. Iron Jaws Maintenance & Snapshotting
+        // 1. Radiant Encore & Resonant Arrow (Highest Priority Burst GCDs)
+        if (RadiantEncorePvE.CanUse(out act, skipComboCheck: true)) return true;
+        if (ResonantArrowPvE.CanUse(out act, skipComboCheck: true)) return true;
+
+        // 2. Iron Jaws Maintenance & Snapshotting
         bool dotsFalling = CurrentTarget?.WillStatusEndGCD(1, 0, true, StatusID.Windbite, StatusID.Stormbite, StatusID.VenomousBite, StatusID.CausticBite) ?? false;
         
         // Critical: Snapshot Raging Strikes
-        // If Raging Strikes is up but ending in < 2.5s (next GCD), refresh dots
-        bool ragingEnding = Player.HasStatus(true, StatusID.RagingStrikes) && Player.WillStatusEnd(2.5f, true, StatusID.RagingStrikes);
+        // If Raging Strikes is up but ending in < 3s check (cleaner snapshot), refresh dots
+        // Also: If we are in Opener/Burst and just applied Raging, we might want to refresh earlier if dots are weird, but standard snapshot is fine.
+        bool ragingEnding = Player.HasStatus(true, StatusID.RagingStrikes) && Player.WillStatusEnd(3.0f, true, StatusID.RagingStrikes);
         
         if (IronJawsPvE.CanUse(out act))
         {
