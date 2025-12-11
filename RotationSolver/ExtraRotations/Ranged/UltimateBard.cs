@@ -50,6 +50,9 @@ public sealed class UltimateBard : BardRotation
     [Range(1, 5, ConfigUnitType.None, 1)]
     public BurstWhen When2Burst { get; set; } = BurstWhen.WithOthers;
 
+    [RotationConfig(CombatType.PvE, Name = "Force Burst in Opener (Ignore Party Buffs)")]
+    public bool ForceOpenerBurst { get; set; } = true;
+
     public enum BurstWhen : byte
     {
         [Description("Never (Self Managed)")] Never,
@@ -89,14 +92,12 @@ public sealed class UltimateBard : BardRotation
         member?.StatusList?.Any(status => burstStatusIds.Contains(status.StatusId)) == true
     ) == true;
 
-    public bool IsBurstReady => (When2Burst == BurstWhen.WithOthers && IsPartyBurst) 
+    public bool IsBurstReady => 
+           (ForceOpenerBurst && InCombat && CombatTime < 20) // Force Burst in Opener
+        || (When2Burst == BurstWhen.WithOthers && IsPartyBurst) 
         || (When2Burst == BurstWhen.Q2M && IsWithinFirst15SecondsOfEvenMinute()) 
         || (When2Burst == BurstWhen.Allday)
-        || (When2Burst == BurstWhen.PreventCap); // Treat PreventCap as always ready for safety in Bard context if user selects it, or refine logic if needed. 
-                                                // For Bard, "Prevent Cap" logic usually is implicitly handled by general rotation, 
-                                                // so we'll treat it as "Go ahead" or maybe just rely on 2min. 
-                                                // Let's stick to the main ones: WithOthers, Q2M, Allday.
-                                                // If "Never", this returns false.
+        || (When2Burst == BurstWhen.PreventCap);
 
     // Helper for 2 minute window
     private bool IsWithinFirst15SecondsOfEvenMinute()
