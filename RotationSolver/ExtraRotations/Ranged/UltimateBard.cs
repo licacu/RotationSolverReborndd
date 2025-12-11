@@ -102,7 +102,9 @@ public sealed class UltimateBard : BardRotation
         (uint)StatusID.SearingLight,
         (uint)StatusID.Embolden,
         (uint)StatusID.Devilment,
-        (uint)StatusID.StarryMuse 
+        (uint)StatusID.StarryMuse,
+        (uint)StatusID.BattleVoice,    // Sync with other Bards
+        (uint)StatusID.RadiantFinale   // Sync with other Bards
     };
 
     private bool ShouldBurst()
