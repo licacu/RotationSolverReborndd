@@ -90,38 +90,45 @@ public sealed class UltimateBard : BardRotation
     private static float AnimLock => Math.Max(AnimationLock, WeaponTotal * 0.25f); // Safer dynamic lock 
 
     // Raid Buff IDs for Smart Alignment
-    // Common 120s/60s raid buffs
-    private static readonly uint[] PartyBuffs = new uint[]
+    // Raid Buff IDs for Smart Alignment (Adapted from Rabbs_BLM)
+    // Using HashSet for efficient O(1) lookups
+    private static readonly HashSet<uint> BurstStatusIds = new()
     {
         (uint)StatusID.Divination,
-        (uint)StatusID.BattleLitany,
         (uint)StatusID.Brotherhood,
-        (uint)StatusID.TechnicalFinish,
+        (uint)StatusID.BattleLitany,
         (uint)StatusID.ArcaneCircle,
-        (uint)StatusID.ChainStratagem,
-        (uint)StatusID.SearingLight,
-        (uint)StatusID.Embolden,
-        (uint)StatusID.Devilment,
         (uint)StatusID.StarryMuse,
+        (uint)StatusID.Embolden,
+        (uint)StatusID.SearingLight,
         (uint)StatusID.BattleVoice,    // Sync with other Bards
-        (uint)StatusID.RadiantFinale   // Sync with other Bards
+        (uint)StatusID.TechnicalFinish,
+        (uint)StatusID.RadiantFinale,  // Sync with other Bards
+        (uint)StatusID.Devilment,
+        (uint)StatusID.ChainStratagem
     };
 
-    private bool ShouldBurst()
+    // Checks if ANY party member has a burst buff active (Logic from Rabbs_BLM)
+    private static bool IsPartyBurst => PartyMembers?.Any(member =>
+        member?.StatusList?.Any(status => BurstStatusIds.Contains(status.StatusId)) == true
+    ) == true;
+
+    // Checks if we should enter burst mode
+    private bool IsBurstReady
     {
-        // 1. If not enabled, always go
-        if (!SmartBurstAlignment) return true;
+        get
+        {
+            // 1. Config Check
+            if (!SmartBurstAlignment) return true;
 
-        // 2. Opener Rule (< 45s)
-        // If we are in the start of the fight, just go.
-        if (CombatTime < 45f) return true;
+            // 2. Opener Exception (< 45s)
+            if (CombatTime < 45f) return true;
 
-        // 3. Raid Buff Check
-        // If external buffs are present, we go.
-        if (Player.HasStatus(true, PartyBuffs)) return true;
-
-        // Otherwise hold
-        return false;
+            // 3. Party Buff Check
+            // We check if ANYONE in the party has a buff. This is more robust than checking just ourselves
+            // in case we missed the buff due to range but should still burst to align.
+            return IsPartyBurst;
+        }
     }
     
     // Check if we are currently IN a burst window state (buffs active)
@@ -262,14 +269,14 @@ public sealed class UltimateBard : BardRotation
         // Check Smart Alignment
         if (RadiantFinalePvE.CanUse(out act))
         {
-            if (ShouldBurst()) return true;
+            if (IsBurstReady) return true;
         }
 
         // 2. Battle Voice
         if (BattleVoicePvE.CanUse(out act))
         {
             // If Radiant Finale is up, OR we don't have Radiant Finale but ShouldBurst is true
-            if (Player.HasStatus(true, StatusID.RadiantFinale) || (!RadiantFinalePvE.EnoughLevel && ShouldBurst()))
+            if (Player.HasStatus(true, StatusID.RadiantFinale) || (!RadiantFinalePvE.EnoughLevel && IsBurstReady))
             {
                  return true;
             }
@@ -284,7 +291,7 @@ public sealed class UltimateBard : BardRotation
             if (buffsActive) return true;
 
             // Fallback: If we are low level or solo, respect ShouldBurst
-            if (!RadiantFinalePvE.EnoughLevel && !BattleVoicePvE.EnoughLevel && ShouldBurst()) return true;
+            if (!RadiantFinalePvE.EnoughLevel && !BattleVoicePvE.EnoughLevel && IsBurstReady) return true;
         }
 
         // 4. Barrage
