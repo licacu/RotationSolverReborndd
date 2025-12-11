@@ -93,16 +93,16 @@ public sealed class UltimateBard : BardRotation
     // Common 120s/60s raid buffs
     private static readonly uint[] PartyBuffs = new uint[]
     {
-        StatusID.Divination,
-        StatusID.BattleLitany,
-        StatusID.Brotherhood,
-        StatusID.TechnicalFinish,
-        StatusID.ArcaneCircle,
-        StatusID.ChainStratagem,
-        StatusID.SearingLight,
-        StatusID.Embolden,
-        StatusID.Devilment,
-        StatusID.StarryMuse 
+        (uint)StatusID.Divination,
+        (uint)StatusID.BattleLitany,
+        (uint)StatusID.Brotherhood,
+        (uint)StatusID.TechnicalFinish,
+        (uint)StatusID.ArcaneCircle,
+        (uint)StatusID.ChainStratagem,
+        (uint)StatusID.SearingLight,
+        (uint)StatusID.Embolden,
+        (uint)StatusID.Devilment,
+        (uint)StatusID.StarryMuse 
     };
 
     private bool ShouldBurst()
