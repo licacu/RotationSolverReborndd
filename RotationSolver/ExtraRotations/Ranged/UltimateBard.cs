@@ -4,14 +4,14 @@ using RotationSolver.RebornRotations.Ranged;
 namespace RotationSolver.RebornRotations.Ranged;
 
 [Rotation("Ultimate Bard", CombatType.PvE, GameVersion = "7.35",
-    Description = "Optimized Bard rotation with Smart Burst Alignment. Maintains strict song cycles while aligning bursts with party buffs.")]
+    Description = "Optimized Bard rotation with Smart Burst Alignment and Custom Level 100 Opener.")]
 [SourceCode(Path = "main/RebornRotations/Ranged/UltimateBard.cs")]
 public sealed class UltimateBard : BardRotation
 {
     #region Configuration
 
     [RotationConfig(CombatType.PvE, Name = "Smart Burst Alignment: Wait for Party Buffs")]
-    [Description("If true, 2-minute bursts (Raging/Battle Voice) will wait for at least one major party buff (e.g. Divination, Litany) to be present before activating, unless it's the Opener.")]
+    [Description("If true, 2-minute bursts will wait for party buffs.")]
     public bool SmartBurstAlignment { get; set; } = true;
 
     private enum SongTiming
@@ -35,9 +35,6 @@ public sealed class UltimateBard : BardRotation
     [Range(1, 45, ConfigUnitType.Seconds, 1)]
     [RotationConfig(CombatType.PvE, Name = "Custom Army's Paeon Uptime", Parent = nameof(SongTimings), ParentValue = SongTiming.Custom)]
     public float CustomArmyTime { get; set; } = 36f;
-
-    [RotationConfig(CombatType.PvE, Name = "Only use DOTs on targets with Boss Icon")]
-    public bool OnlyDotBoss { get; set; } = true;
 
     [RotationConfig(CombatType.PvE, Name = "Potion: Use in Opener")]
     public bool UsePotionOpener { get; set; } = true;
@@ -74,24 +71,19 @@ public sealed class UltimateBard : BardRotation
         _ => 43f
     };
 
-    private float WandRemainTime => 45f - WandTime;
-    private float MageRemainTime => 45f - MageTime;
-    private float ArmyRemainTime => 45f - ArmyTime;
-
     private bool InWanderers => Song == Song.Wanderer;
     private bool InMages => Song == Song.Mage;
     private bool InArmys => Song == Song.Army;
     private bool NoSong => Song == Song.None;
 
-    // Advanced Weaving Logic (Adapted from ChurinBRD)
+    // Advanced Weaving Logic
+    private static float WeaponTotal => 2.5f; 
     private static float LateWeaveWindow => WeaponTotal * 0.5f;
     private static bool CanLateWeave => (WeaponRemain > 0) && (WeaponRemain <= LateWeaveWindow) && EnoughWeaveTime;
     private static bool EnoughWeaveTime => (WeaponRemain > AnimLock) && WeaponRemain > 0;
-    private static float AnimLock => Math.Max(AnimationLock, WeaponTotal * 0.25f); // Safer dynamic lock 
+    private static float AnimLock => Math.Max(AnimationLock, WeaponTotal * 0.25f);
 
-    // Raid Buff IDs for Smart Alignment
     // Raid Buff IDs for Smart Alignment (Adapted from Rabbs_BLM)
-    // Using HashSet for efficient O(1) lookups
     private static readonly HashSet<uint> BurstStatusIds = new()
     {
         (uint)StatusID.Divination,
@@ -101,62 +93,230 @@ public sealed class UltimateBard : BardRotation
         (uint)StatusID.StarryMuse,
         (uint)StatusID.Embolden,
         (uint)StatusID.SearingLight,
-        (uint)StatusID.BattleVoice,    // Sync with other Bards
+        (uint)StatusID.BattleVoice,
         (uint)StatusID.TechnicalFinish,
-        (uint)StatusID.RadiantFinale,  // Sync with other Bards
+        (uint)StatusID.RadiantFinale,
         (uint)StatusID.Devilment,
         (uint)StatusID.ChainStratagem
     };
 
-    // Checks if ANY party member has a burst buff active (Logic from Rabbs_BLM)
     private static bool IsPartyBurst => PartyMembers?.Any(member =>
         member?.StatusList?.Any(status => BurstStatusIds.Contains(status.StatusId)) == true
     ) == true;
 
-    // Checks if we should enter burst mode
     private bool IsBurstReady
     {
         get
         {
-            // 1. Config Check
             if (!SmartBurstAlignment) return true;
-
-            // 2. Opener Exception (< 45s)
             if (CombatTime < 45f) return true;
-
-            // 3. Party Buff Check
-            // We check if ANYONE in the party has a buff. This is more robust than checking just ourselves
-            // in case we missed the buff due to range but should still burst to align.
             return IsPartyBurst;
         }
     }
     
-    // Check if we are currently IN a burst window state (buffs active)
     private bool InBurstMode => 
         (HasRagingStrikes && HasBattleVoice) || 
         (HasRagingStrikes && !BattleVoicePvE.EnoughLevel);
 
-    // Helper to replace missing GetNearbyEnemies
     private int CountEnemiesInRange(float range)
     {
         if (AllHostileTargets == null) return 0;
         return AllHostileTargets.Count(t => t.DistanceToPlayer() <= range);
     }
 
+    // Opener State
+    private int _openerStep = 0;
+    private bool _inOpener = false;
+
+    // Reset opener on combat end
+    protected override void UpdateInfo()
+    {
+        if (!InCombat)
+        {
+            _openerStep = 0;
+            _inOpener = false;
+        }
+        
+        // Attempt to trigger opener at start
+        if (InCombat && CombatTime < 5f && _openerStep == 0 && !IsDummy)
+        {
+            _inOpener = true;
+        }
+
+        base.UpdateInfo();
+    }
+
     #endregion
 
     #region Countdown
-
     protected override IAction? CountDownAction(float remainTime)
     {
-        // Potion at -1.5s approx to cover opener
-        // Potion at -2.0s to -0.5s to ensure usage
         if (UsePotionOpener && remainTime <= 2.0f && remainTime > 0.5f)
         {
             if (UseBurstMedicine(out var act)) return act;
         }
-
         return base.CountDownAction(remainTime);
+    }
+    #endregion
+
+    #region Opener Implementation (Lv 100)
+    
+    private bool ExecuteOpenerGCD(out IAction? act)
+    {
+        act = null;
+        if (!_inOpener) return false;
+
+        // Step 0: Stormbite
+        if (_openerStep == 0)
+        {
+             if (StormbitePvE.CanUse(out act)) return true;
+             // If already applied (pre-pull?), advance
+             if (CurrentTarget?.HasStatus(true, StatusID.Stormbite) == true) _openerStep++;
+        }
+
+        // Step 1: Caustic Bite
+        if (_openerStep == 1)
+        {
+            if (CausticBitePvE.CanUse(out act)) return true;
+            if (CurrentTarget?.HasStatus(true, StatusID.VenomousBite) == true) _openerStep++;
+        }
+
+        // Step 2: Burst Shot
+        if (_openerStep == 2)
+        {
+            if (BurstShotPvE.CanUse(out act)) return true;
+            // Advance logic is tricky for filler, assume next GCD
+            if (IsLastGCD(ActionID.BurstShotPvE)) _openerStep++;
+        }
+
+        // Step 3: Burst Shot
+        if (_openerStep == 3)
+        {
+            if (BurstShotPvE.CanUse(out act)) return true;
+            if (IsLastGCD(ActionID.BurstShotPvE) && Player.HasStatus(true, StatusID.RagingStrikes)) _openerStep++;
+        }
+
+        // Step 4: Radiant Encore
+        if (_openerStep == 4)
+        {
+            if (RadiantEncorePvE.CanUse(out act, skipComboCheck: true)) return true;
+            // If we missed it (no coda?), failover to Refulgent
+            _openerStep++;
+        }
+
+        // Step 5: Refulgent Arrow
+        if (_openerStep == 5)
+        {
+            if (RefulgentArrowPvE.CanUse(out act, skipComboCheck: true)) return true;
+            if (StraightShotPvE.CanUse(out act)) return true; // Fallback
+             _openerStep++;
+        }
+
+        // Step 6: Resonant Arrow
+        if (_openerStep == 6)
+        {
+            if (ResonantArrowPvE.CanUse(out act, skipComboCheck: true)) return true;
+             _openerStep++;
+        }
+
+        // Step 7: Refulgent Arrow
+        if (_openerStep == 7)
+        {
+            if (RefulgentArrowPvE.CanUse(out act, skipComboCheck: true)) return true;
+             _openerStep++;
+        }
+
+        // Step 8: Burst Shot
+        if (_openerStep == 8)
+        {
+            if (BurstShotPvE.CanUse(out act)) return true;
+             _openerStep++;
+        }
+
+        // Step 9: Iron Jaws
+        if (_openerStep == 9)
+        {
+             if (IronJawsPvE.CanUse(out act)) return true;
+             // End Opener
+             _inOpener = false;
+        }
+
+        return false;
+    }
+
+    private bool ExecuteOpeneroGCD(out IAction? act)
+    {
+        act = null;
+        if (!_inOpener) return false;
+
+        // Note: oGCDs assume the previous GCD is running
+        
+        // After Stormbite: Wanderer -> Empyreal
+        if (_openerStep == 0)
+        {
+             if (TheWanderersMinuetPvE.CanUse(out act)) return true;
+             if (EmpyrealArrowPvE.CanUse(out act)) return true;
+        }
+
+        // After Caustic: Pot -> BV
+        if (_openerStep == 1)
+        {
+            // Pot handled by general logic usually, but here:
+            if (UsePotionOpener && !Player.HasStatus(true, StatusID.Medicated))
+            {
+                 if (UseBurstMedicine(out act)) return true;
+            }
+            if (BattleVoicePvE.CanUse(out act)) return true;
+        }
+
+        // After Burst Shot 1: Radiant Finale -> Raging Strikes
+        if (_openerStep == 2)
+        {
+            if (RadiantFinalePvE.CanUse(out act)) return true;
+            if (RagingStrikesPvE.CanUse(out act)) return true;
+        }
+
+        // After Burst Shot 2: Heartbreak -> (Next GCD is Radiant Encore)
+        // Wait, User said: Burst Shot -> Heartbreak -> Radiant Encore -> Barrage
+        // So after Burst Shot (Step 3), we use Heartbreak
+        if (_openerStep == 3)
+        {
+            if (HeartbreakShotPvE.CanUse(out act, usedUp: true)) return true;
+        }
+
+        // After Radiant Encore (Step 4): Barrage
+        if (_openerStep == 4)
+        {
+            if (BarragePvE.CanUse(out act)) return true;
+        }
+
+        // After Refulgent (Step 5): Sidewinder
+        if (_openerStep == 5)
+        {
+            if (SidewinderPvE.CanUse(out act)) return true;
+        }
+
+        // After Resonant (Step 6): Empyreal
+        if (_openerStep == 6)
+        {
+            if (EmpyrealArrowPvE.CanUse(out act)) return true;
+        }
+
+        // After Refulgent (Step 7): Heartbreak
+        if (_openerStep == 7)
+        {
+             if (HeartbreakShotPvE.CanUse(out act, usedUp: true)) return true;
+        }
+        
+        // Step 8 (Burst Shot): No Weave requested
+        
+        // Step 9 (Iron Jaws): Pitch Perfect
+        if (_openerStep == 9)
+        {
+            if (PitchPerfectPvE.CanUse(out act)) return true;
+        }
+
+        return false;
     }
 
     #endregion
@@ -165,75 +325,55 @@ public sealed class UltimateBard : BardRotation
 
     protected override bool EmergencyAbility(IAction nextGCD, out IAction? act)
     {
-        // 1. Esuna / Cleanse
-        if (TheWardensPaeanPvE.CanUse(out act) && Player.HasStatus(true, StatusID.Doom))
-        {
-            return true;
-        }
+        // 0. Opener
+        if (ExecuteOpeneroGCD(out act)) return true;
 
-        // 2. Weaving Check
+        // 1. Esuna
+        if (TheWardensPaeanPvE.CanUse(out act) && Player.HasStatus(true, StatusID.Doom)) return true;
+
         if (!EnoughWeaveTime) 
         {
             act = null;
             return false;
         }
 
-        // 3. Potion Logic (Mid-Fight)
-        // Use potion if we are entering burst (Raging Strikes just went up or is about to)
+        // 2. Pot
         if (UsePotionBurst && InBurstMode && !Player.HasStatus(true, StatusID.Medicated))
         {
              if (UseBurstMedicine(out act)) return true;
         }
 
-        // 4. Pitch Perfect (Wanderer's Minuet)
+        // 3. Pitch Perfect
         if (InWanderers)
         {
-            // Use at 3 stacks
             if (Repertoire == 3 && PitchPerfectPvE.CanUse(out act)) return true;
-
-            // Avoid Empyreal Overcap (2 stacks + Empyreal incoming)
             if (Repertoire >= 2 && EmpyrealArrowPvE.Cooldown.WillHaveOneChargeGCD(1) && PitchPerfectPvE.CanUse(out act)) return true;
-
-            // Use remaining stacks before song ends
-            if (SongEndAfter(WandRemainTime) && SongTime < (WandRemainTime - AnimLock) && Repertoire > 0 && PitchPerfectPvE.CanUse(out act)) return true;
+            if (SongTime >= (WandTime - AnimLock) && Repertoire > 0 && PitchPerfectPvE.CanUse(out act)) return true;
         }
 
-        // 5. Empyreal Arrow
+        // 4. Empyreal Arrow
         if (EmpyrealArrowPvE.CanUse(out act))
         {
-            // Repertoire cap check
             if (Repertoire == 3) return true;
-
-            // In Mages/Armys, always use to cycle
             if (!InWanderers) return true;
-
-            // In Wanderers, prioritize Late Weave for procs, but don't drift heavily
             if (InWanderers)
             {
                if (CanLateWeave) return true;
-               // If we held it too long, just use it to avoid drift
                if (EmpyrealArrowPvE.Cooldown.CurrentCharges > 0.9f) return true;
             }
         }
 
-        // 6. Heartbreak Shot / Bloodletter / Rain of Death
-        // Prevent overcap (3 charges)
+        // 5. Heartbreak / Bloodletter
         bool isAoe = CountEnemiesInRange(5) >= 3;
         var blAction = isAoe ? RainOfDeathPvE : (HeartbreakShotPvE.EnoughLevel ? HeartbreakShotPvE : BloodletterPvE);
-        var blCharges = BloodletterPvE.Cooldown.CurrentCharges;
-
+        
         // CRITICAL: Dump Heartbreak Shot during Burst
         if (InBurstMode && blAction.CanUse(out act, usedUp: true)) return true;
 
         if (blAction.CanUse(out act))
         {
-            // If near max charges, use
-            if (blCharges >= 2.8f) return true;
-
-            // In Mages Ballad, dump frequently to avoid proc overcap
-            if (InMages && blCharges >= 1f) return true;
-
-            // In Burst, dump for damage
+            if (BloodletterPvE.Cooldown.CurrentCharges >= 2.8f) return true;
+            if (InMages && BloodletterPvE.Cooldown.CurrentCharges >= 1f) return true;
             if (InBurstMode) return true;
         }
         
@@ -242,13 +382,14 @@ public sealed class UltimateBard : BardRotation
 
     protected override bool GeneralAbility(IAction nextGCD, out IAction? act)
     {
-        // Song Cycle Management: Wanderers -> Mages -> Armys
+        // Song Cycle Management (Fixed Logic using SongTime)
+        // Check if we need to switch songs based on ELAPSED TIME (SongTime)
         
         // 1. Switch to Wanderers Minuet
         // Condition: In Armys and time is up, OR No Song
         if (TheWanderersMinuetPvE.CanUse(out act))
         {
-             if (InArmys && SongEndAfter(ArmyRemainTime)) return true;
+             if (InArmys && SongTime >= ArmyTime) return true;
              if (NoSong) return true;
         }
 
@@ -256,24 +397,14 @@ public sealed class UltimateBard : BardRotation
         // Condition: In Wanderers and time is up
         if (MagesBalladPvE.CanUse(out act))
         {
-            if (InWanderers)
-            {
-                // Relaxed Logic: If song < 3s remaining, switch to prevent locking
-                if (SongTime >= (WandTime - 3f)) return true;
-                if (SongEndAfter(WandRemainTime)) return true; 
-            }
+            if (InWanderers && SongTime >= WandTime) return true;
         }
 
         // 3. Switch to Armys Paeon
         // Condition: In Mages and time is up
         if (ArmysPaeonPvE.CanUse(out act))
         {
-            if (InMages)
-            {
-                 // Relaxed Logic: If song < 3s remaining, switch
-                 if (SongTime >= (MageTime - 3f)) return true;
-                 if (SongEndAfter(MageRemainTime)) return true;
-            }
+            if (InMages && SongTime >= MageTime) return true;
         }
 
         return base.GeneralAbility(nextGCD, out act);
@@ -281,52 +412,34 @@ public sealed class UltimateBard : BardRotation
 
     protected override bool AttackAbility(IAction nextGCD, out IAction? act)
     {
-        // 1. Radiant Finale (Highest Priority Buffer)
-        // Check Smart Alignment
+        if (ExecuteOpeneroGCD(out act)) return true;
+
         if (RadiantFinalePvE.CanUse(out act))
         {
             if (IsBurstReady) return true;
         }
 
-        // 2. Battle Voice
         if (BattleVoicePvE.CanUse(out act))
         {
-            // If Radiant Finale is up, OR we don't have Radiant Finale but ShouldBurst is true
-            if (Player.HasStatus(true, StatusID.RadiantFinale) || (!RadiantFinalePvE.EnoughLevel && IsBurstReady))
-            {
-                 return true;
-            }
+            if (Player.HasStatus(true, StatusID.RadiantFinale) || (!RadiantFinalePvE.EnoughLevel && IsBurstReady)) return true;
         }
 
-        // 3. Raging Strikes
         if (RagingStrikesPvE.CanUse(out act))
         {
-            // If we have other buffs, or strict burst alignment allows and we are initiating
             bool buffsActive = Player.HasStatus(true, StatusID.RadiantFinale) || Player.HasStatus(true, StatusID.BattleVoice);
-            
             if (buffsActive) return true;
-
-            // Fallback: If we are low level or solo, respect ShouldBurst
             if (!RadiantFinalePvE.EnoughLevel && !BattleVoicePvE.EnoughLevel && IsBurstReady) return true;
         }
 
-        // 4. Barrage
         if (BarragePvE.CanUse(out act))
         {
-            // Snapshotting: Use with Raging active
             if (Player.HasStatus(true, StatusID.RagingStrikes)) return true;
-
-            // Anti-Drift: If Raging is far away (> 20s), just use it
             if (!RagingStrikesPvE.Cooldown.WillHaveOneCharge(20)) return true;
         }
 
-        // 5. Sidewinder
         if (SidewinderPvE.CanUse(out act))
         {
-            // Align with Burst if possible
              if (InBurstMode) return true;
-             
-             // Anti-Drift
              if (!RagingStrikesPvE.Cooldown.WillHaveOneCharge(10)) return true;
         }
 
@@ -339,7 +452,11 @@ public sealed class UltimateBard : BardRotation
 
     protected override bool GeneralGCD(out IAction? act)
     {
-        // 1. Radiant Encore & Resonant Arrow (Highest Priority Burst GCDs)
+        // 0. Custom Opener
+        if (ExecuteOpenerGCD(out act)) return true;
+
+        // 1. Radiant Encore & Resonant Arrow (Highest Priority)
+        // Ensure we don't miss these in bursts
         if (RadiantEncorePvE.CanUse(out act, skipComboCheck: true)) return true;
         if (ResonantArrowPvE.CanUse(out act, skipComboCheck: true)) return true;
 
@@ -347,62 +464,39 @@ public sealed class UltimateBard : BardRotation
         bool dotsFalling = CurrentTarget?.WillStatusEndGCD(1, 0, true, StatusID.Windbite, StatusID.Stormbite, StatusID.VenomousBite, StatusID.CausticBite) ?? false;
         
         // Critical: Snapshot Raging Strikes
-        // If Raging Strikes is up but ending in < 3s check (cleaner snapshot), refresh dots
-        // Also: If we are in Opener/Burst and just applied Raging, we might want to refresh earlier if dots are weird, but standard snapshot is fine.
         bool ragingEnding = Player.HasStatus(true, StatusID.RagingStrikes) && Player.WillStatusEnd(3.0f, true, StatusID.RagingStrikes);
         
         if (IronJawsPvE.CanUse(out act))
         {
             if (dotsFalling) return true;
             if (ragingEnding) return true;
+            
+            // Burst Window Assurance: If we have full buffs, ensuring IJ is up logic?
+            // Usually Raging Ending handles the snapshot.
         }
 
-        // 2. Blast Arrow
+        // 3. Blast Arrow
         if (BlastArrowPvE.CanUse(out act))
         {
-            // Logic: 
-            // 1. Use immediately if in Raging Strikes
             if (Player.HasStatus(true, StatusID.RagingStrikes)) return true;
-
-            // 2. If proc is expiring (< 3s), use it so we don't lose it
-            // Note: Blast Arrow buff ID is often internal or managed by job gauge, checking action usage is safer.
-            // But we typically want to save it for burst.
-            // If burst is effectively ready (Raging Strikes CD < 5s), hold.
-            // Otherwise use.
             if (!RagingStrikesPvE.Cooldown.WillHaveOneCharge(5)) return true;
-
-            // If we are holding for burst, do NOT return true here (fall through).
-            // But we must ensure we don't lose it.
-            // Hard to check exact proc remaining time without status ID (StatusID.BlastArrowReady?), assuming simple logic:
-            // If Raging CD is long (> 10s), just use.
             if (!RagingStrikesPvE.Cooldown.WillHaveOneCharge(10)) return true;
         }
 
-        // 3. Apex Arrow
+        // 4. Apex Arrow
         if (ApexArrowPvE.CanUse(out act))
         {
-            // Max Gauge = Overcap risk -> Use
             if (SoulVoice == 100) return true;
-
-            // In Burst -> Use for damage
-            if (Player.HasStatus(true, StatusID.RagingStrikes)) 
-            {
-                if (SoulVoice >= 80) return true;
-            }
-
-            // Otherwise, pool gauge (return false to fall through to fillers)
-            // But if we are very far from burst (> 30s) and high gauge (> 80), maybe usage is okay?
-            // Churin logic prefers holding for 2 minutes unless overcap.
+            if (Player.HasStatus(true, StatusID.RagingStrikes) && SoulVoice >= 80) return true;
         }
 
-        // 4. AoE (Barrage / Procs)
+        // 5. AoE
         if (ShadowbitePvE.CanUse(out act)) return true;
         if (WideVolleyPvE.CanUse(out act)) return true;
         if (LadonsbitePvE.CanUse(out act)) return true; 
         if (QuickNockPvE.CanUse(out act)) return true;
 
-        // 5. Single Target & DoT Application
-        // Check DoT Boss rules
+        // 6. DoT & Fillers
         bool isBoss = CurrentTarget?.IsBossFromIcon() ?? false;
         bool shouldDot = !OnlyDotBoss || isBoss;
 
@@ -411,12 +505,10 @@ public sealed class UltimateBard : BardRotation
              if (StormbitePvE.CanUse(out act) && (CurrentTarget?.HasStatus(true, StatusID.Stormbite) == false)) return true;
              if (CausticBitePvE.CanUse(out act) && (CurrentTarget?.HasStatus(true, StatusID.VenomousBite) == false)) return true;
              
-             // Low Level fallback
              if (!StormbitePvE.EnoughLevel && WindbitePvE.CanUse(out act) && (CurrentTarget?.HasStatus(true, StatusID.Windbite) == false)) return true;
              if (!CausticBitePvE.EnoughLevel && VenomousBitePvE.CanUse(out act) && (CurrentTarget?.HasStatus(true, StatusID.VenomousBite) == false)) return true;
         }
         
-        // 6. Fillers
         if (RefulgentArrowPvE.CanUse(out act, skipComboCheck: true)) return true;
         if (StraightShotPvE.CanUse(out act)) return true;
         if (BurstShotPvE.CanUse(out act)) return true;
