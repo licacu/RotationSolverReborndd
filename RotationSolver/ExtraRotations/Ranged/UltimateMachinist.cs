@@ -737,11 +737,10 @@ public sealed class UltimateMachinist : MachinistRotation
         ImGui.Text($"Is In 2Min Window: {IsIn2MinWindow}");
         ImGui.Separator();
 
-        ImGui.TextColored(ImGuiColors.DalamudOrange, "Pooling:");
-        ImGui.Text($"Burst Approaching: {IsBurstApproaching} ({SecondsUntilBurst:F0}s)");
+        ImGui.TextColored(ImGuiColors.DalamudOrange, "Pooling (oGCD only):");
+        ImGui.Text($"Seconds Until Burst: {SecondsUntilBurst:F0}s");
         ImGui.Text($"Hold Reassemble: {ShouldHoldReassemble}");
-        ImGui.Text($"Hold Drill: {ShouldHoldDrill}");
-        ImGui.Text($"Hold Chainsaw: {ShouldHoldChainsaw}");
+        ImGui.Text($"Hold Barrel Stab: {ShouldHoldBarrelStabilizer}");
         ImGui.Separator();
 
         ImGui.TextColored(ImGuiColors.TankBlue, "Potion:");
