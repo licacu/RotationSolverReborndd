@@ -101,34 +101,27 @@ public sealed class UltimateMachinist : MachinistRotation
 
     #region Skill Pooling Logic
 
+    // IMPORTANT: Pooling should NEVER cause GCD drift!
+    // Only pool Reassemble (it's oGCD), never pool tool GCDs
+
     /// <summary>
-    /// Should hold Reassemble for burst? Keep at least 1 charge
+    /// Should hold Reassemble for burst? Only if burst is very close (5s) and not capping
     /// </summary>
     public bool ShouldHoldReassemble => PoolSkillsForBurst
-        && IsBurstApproaching
-        && ReassemblePvE.Cooldown.CurrentCharges >= 1
-        && ReassemblePvE.Cooldown.CurrentCharges < 2; // Don't hold if capping
+        && SecondsUntilBurst <= 5f  // Only very close to burst
+        && SecondsUntilBurst > 0
+        && ReassemblePvE.Cooldown.CurrentCharges == 1  // Only 1 charge
+        && ReassemblePvE.Cooldown.RecastTimeRemainOneCharge > 10f; // Not about to cap
+
+    // REMOVED: Drill/Chainsaw pooling - causes GCD drift!
+    // MCH tools should ALWAYS be used on cooldown
 
     /// <summary>
-    /// Should hold Drill for burst? Keep 1 charge for burst
-    /// </summary>
-    public bool ShouldHoldDrill => PoolSkillsForBurst
-        && IsBurstApproaching
-        && DrillPvE.Cooldown.CurrentCharges < 2; // Don't hold if 2 charges
-
-    /// <summary>
-    /// Should hold Chainsaw for burst?
-    /// </summary>
-    public bool ShouldHoldChainsaw => PoolSkillsForBurst
-        && IsBurstApproaching
-        && !HasExcavatorReady
-        && ChainSawPvE.Cooldown.RecastTimeRemainOneCharge < PoolingWindow;
-
-    /// <summary>
-    /// Should hold Barrel Stabilizer for burst?
+    /// Should hold Barrel Stabilizer? Only if burst is imminent
     /// </summary>
     public bool ShouldHoldBarrelStabilizer => PoolSkillsForBurst
-        && IsBurstApproaching
+        && SecondsUntilBurst <= 5f
+        && SecondsUntilBurst > 0
         && !HasHypercharged
         && !HasFullMetalMachinist;
 
@@ -545,13 +538,11 @@ public sealed class UltimateMachinist : MachinistRotation
             return true;
         }
 
-        // Drill (with pooling)
-        if (!ShouldHoldDrill || ShouldBurst || DrillPvE.Cooldown.CurrentCharges == 2)
+        // Drill - ALWAYS use on cooldown, never hold (causes drift)
+        // for opener: only use the first charge of Drill after AirAnchor when there are two
+        if (DrillPvE.CanUse(out act, usedUp: false))
         {
-            if (DrillPvE.CanUse(out act, usedUp: false))
-            {
-                return true;
-            }
+            return true;
         }
 
         if (!HotShotMasteryTrait.EnoughLevel && HotShotPvE.CanUse(out act))
@@ -559,13 +550,10 @@ public sealed class UltimateMachinist : MachinistRotation
             return true;
         }
 
-        // Chainsaw (with pooling)
-        if (!ShouldHoldChainsaw || ShouldBurst)
+        // Chainsaw - ALWAYS use on cooldown
+        if (ChainSawPvE.CanUse(out act))
         {
-            if (ChainSawPvE.CanUse(out act))
-            {
-                return true;
-            }
+            return true;
         }
 
         // Excavator
