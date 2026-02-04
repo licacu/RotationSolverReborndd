@@ -10,18 +10,31 @@ namespace RotationSolver.ExtraRotations.Ranged;
 public sealed class UltimateMachinist : MachinistRotation
 {
     #region Config Options
-    
+
+    [RotationConfig(CombatType.PvE, Name = "Use burst medicine in opener")]
+    private bool OpenerBurstMeds { get; set; } = true;
+
+    [RotationConfig(CombatType.PvE, Name = "Use Bioblaster while moving")]
+    private bool BioMove { get; set; } = true;
+
+    [RotationConfig(CombatType.PvE, Name = "Only use Wildfire on Boss targets")]
+    private bool WildfireBoss { get; set; } = false;
+
+    [RotationConfig(CombatType.PvE, Name = "Restrict mitigations to not overlap")]
+    private bool MitOverlap { get; set; } = false;
+
+    [RotationConfig(CombatType.PvE, Name = "Use AirAnchor at 1 second remaining on countdown")]
+    private bool AirAnchorCountdown { get; set; } = false;
+
+    // === NEW CONFIG OPTIONS ===
     [RotationConfig(CombatType.PvE, Name = "Burst Mode")]
     public BurstMode BurstSetting { get; set; } = BurstMode.WithParty;
 
-    [RotationConfig(CombatType.PvE, Name = "Potion Usage")]
-    public PotionMode PotionSetting { get; set; } = PotionMode.Every2Min;
+    [RotationConfig(CombatType.PvE, Name = "Potion Usage (4:30 cooldown)")]
+    public PotionMode PotionSetting { get; set; } = PotionMode.OpenerAnd6Min;
 
     [RotationConfig(CombatType.PvE, Name = "Pool Skills for Burst")]
     public bool PoolSkillsForBurst { get; set; } = true;
-
-    [RotationConfig(CombatType.PvE, Name = "Use 10x Heat Blast Optimization")]
-    public bool Use10xHB { get; set; } = true;
 
     [RotationConfig(CombatType.PvE, Name = "Seconds before burst to start pooling")]
     [Range(10, 30, ConfigUnitType.Seconds, 1)]
@@ -29,23 +42,23 @@ public sealed class UltimateMachinist : MachinistRotation
 
     public enum BurstMode : byte
     {
+        [Description("Use RSR Default (IsBurst)")] Default,
         [Description("Solo (Every 2 min)")] Solo,
-        [Description("With Party Buffs")] WithParty,
-        [Description("Manual Only")] Manual
+        [Description("With Party Buffs")] WithParty
     }
 
     public enum PotionMode : byte
     {
         [Description("Never")] Never,
         [Description("Opener Only")] OpenerOnly,
-        [Description("Every 2 Minutes")] Every2Min,
+        [Description("Opener + 6min burst (4:30 CD)")] OpenerAnd6Min,
         [Description("With Party (when others use)")] WithParty
     }
 
     #endregion
 
-    #region Burst Status IDs
-    
+    #region Party Burst Detection
+
     private static readonly HashSet<uint> BurstStatusIds =
     [
         (uint)StatusID.Divination,
@@ -60,64 +73,29 @@ public sealed class UltimateMachinist : MachinistRotation
         (uint)StatusID.RadiantFinale
     ];
 
-    #endregion
-
-    #region Burst Timing Detection
-
-    /// <summary>
-    /// Check if any party member has burst buffs active
-    /// </summary>
     public static bool IsPartyBursting => PartyMembers?.Any(member =>
         member?.StatusList?.Any(status => BurstStatusIds.Contains(status.StatusId)) == true
     ) == true;
 
-    /// <summary>
-    /// Check if any party member has Medicated (potion) status
-    /// </summary>
     public static bool IsPartyMedicated => PartyMembers?.Any(member =>
         member?.StatusList?.Any(status => status.StatusId == (uint)StatusID.Medicated) == true
     ) == true;
 
     /// <summary>
-    /// Check if we're in opener phase (first 15 seconds of combat)
-    /// </summary>
-    public bool IsInOpener => CombatTime > 0 && CombatTime < 15 && InCombat;
-
-    /// <summary>
-    /// Current position in 2-minute cycle (0-120 seconds)
-    /// </summary>
-    public float CyclePosition => CombatTime > 0 ? (CombatTime % 120f) : 0f;
-
-    /// <summary>
-    /// Check if we're in the 2-minute burst window (first 20 seconds of cycle)
-    /// </summary>
-    public bool IsIn2MinWindow => CombatTime > 0 && CyclePosition < 20f;
-
-    /// <summary>
-    /// Seconds until next 2-minute burst window
-    /// </summary>
-    public float SecondsUntilBurst => CyclePosition < 20f ? 0f : (120f - CyclePosition);
-
-    /// <summary>
-    /// Check if burst window is approaching (within pooling window)
-    /// </summary>
-    public bool IsBurstApproaching => SecondsUntilBurst <= PoolingWindow && SecondsUntilBurst > 0;
-
-    /// <summary>
-    /// Determine if we should burst based on settings
+    /// Enhanced burst check that considers party buffs
     /// </summary>
     public bool ShouldBurst => BurstSetting switch
     {
-        BurstMode.WithParty => IsPartyBursting || IsIn2MinWindow,
+        BurstMode.Default => IsBurst,
         BurstMode.Solo => IsIn2MinWindow,
-        BurstMode.Manual => false,
-        _ => false
+        BurstMode.WithParty => IsPartyBursting || IsIn2MinWindow,
+        _ => IsBurst
     };
 
-    /// <summary>
-    /// Check if this is the first 2-min burst (optimal for 10xHB with potion)
-    /// </summary>
-    public bool IsFirst2MinBurst => CombatTime >= 110 && CombatTime <= 140;
+    public float CyclePosition => CombatTime > 0 ? (CombatTime % 120f) : 0f;
+    public bool IsIn2MinWindow => CombatTime > 0 && CyclePosition < 20f;
+    public float SecondsUntilBurst => CyclePosition < 20f ? 0f : (120f - CyclePosition);
+    public bool IsBurstApproaching => SecondsUntilBurst <= PoolingWindow && SecondsUntilBurst > 0;
 
     #endregion
 
@@ -129,15 +107,14 @@ public sealed class UltimateMachinist : MachinistRotation
     public bool ShouldHoldReassemble => PoolSkillsForBurst
         && IsBurstApproaching
         && ReassemblePvE.Cooldown.CurrentCharges >= 1
-        && !ReassembleWillCap;
+        && ReassemblePvE.Cooldown.CurrentCharges < 2; // Don't hold if capping
 
     /// <summary>
     /// Should hold Drill for burst? Keep 1 charge for burst
     /// </summary>
     public bool ShouldHoldDrill => PoolSkillsForBurst
         && IsBurstApproaching
-        && DrillPvE.Cooldown.CurrentCharges < 2
-        && !DrillWillCap;
+        && DrillPvE.Cooldown.CurrentCharges < 2; // Don't hold if 2 charges
 
     /// <summary>
     /// Should hold Chainsaw for burst?
@@ -145,7 +122,7 @@ public sealed class UltimateMachinist : MachinistRotation
     public bool ShouldHoldChainsaw => PoolSkillsForBurst
         && IsBurstApproaching
         && !HasExcavatorReady
-        && ChainSawPvE.Cooldown.IsCoolingDown;
+        && ChainSawPvE.Cooldown.RecastTimeRemainOneCharge < PoolingWindow;
 
     /// <summary>
     /// Should hold Barrel Stabilizer for burst?
@@ -157,117 +134,37 @@ public sealed class UltimateMachinist : MachinistRotation
 
     #endregion
 
-    #region Cap Prevention
-
-    /// <summary>
-    /// Reassemble about to cap (2 charges or 1 charge with less than 5s to next)
-    /// </summary>
-    public bool ReassembleWillCap => ReassemblePvE.Cooldown.CurrentCharges == 2
-        || (ReassemblePvE.Cooldown.CurrentCharges == 1
-            && ReassemblePvE.Cooldown.RecastTimeRemainOneCharge < 5f);
-
-    /// <summary>
-    /// Drill at max charges
-    /// </summary>
-    public bool DrillWillCap => DrillPvE.Cooldown.CurrentCharges == 2;
-
-    /// <summary>
-    /// Battery about to cap
-    /// </summary>
-    public bool BatteryWillCap => Battery >= 90;
-
-    /// <summary>
-    /// Heat about to cap (only use if not approaching burst)
-    /// </summary>
-    public bool HeatWillCap => Heat >= 95 && !IsBurstApproaching;
-
-    #endregion
-
-    #region Queen Timing
-
-    /// <summary>
-    /// Determine optimal Queen summon timing
-    /// </summary>
-    public bool ShouldSummonQueen
-    {
-        get
-        {
-            if (Battery < 50 || IsRobotActive) return false;
-
-            // During burst with 100 battery - summon immediately
-            if (ShouldBurst && Battery == 100) return true;
-
-            // Approaching burst with 100 battery - summon now so Queen finishes during burst
-            if (IsBurstApproaching && Battery >= 90) return true;
-
-            // Cap prevention - always summon if about to cap
-            if (BatteryWillCap) return true;
-
-            // Between bursts: summon at 50-60 to avoid capping
-            if (!IsBurstApproaching && !ShouldBurst && Battery >= 50 && Battery <= 70)
-            {
-                // Only if we won't have 100 for next burst
-                return SecondsUntilBurst > 30;
-            }
-
-            return false;
-        }
-    }
-
-    #endregion
-
-    #region 10x Heat Blast Check
-
-    /// <summary>
-    /// Check if we can execute 10x Heat Blast rotation
-    /// Requirements: FMF ready, tools aligned, enough heat
-    /// </summary>
-    public bool Can10xHB => Use10xHB
-        && HasFullMetalMachinist
-        && !BarrelStabilizerPvE.Cooldown.IsCoolingDown
-        && (Heat >= 50 || HasHypercharged);
-
-    /// <summary>
-    /// Check if all tools are ready for burst
-    /// </summary>
-    public bool ToolsAligned => !AirAnchorPvE.Cooldown.IsCoolingDown
-        && !ChainSawPvE.Cooldown.IsCoolingDown
-        && DrillPvE.Cooldown.CurrentCharges >= 1;
-
-    #endregion
-
     #region Potion Logic
 
     /// <summary>
-    /// Determine if potion should be used
+    /// Potion has 4:30 (270s) cooldown, so use at opener and 6min burst
     /// </summary>
     public bool ShouldUsePotion
     {
         get
         {
             if (PotionSetting == PotionMode.Never) return false;
-
-            // Already medicated
             if (StatusHelper.PlayerHasStatus(true, StatusID.Medicated)) return false;
-
-            // Opener (first 5 seconds)
-            if (IsInOpener && CombatTime > 2 && CombatTime < 8)
-                return true;
-
-            // Opener only mode - don't use after opener
-            if (PotionSetting == PotionMode.OpenerOnly)
-                return false;
 
             // Party sync mode
             if (PotionSetting == PotionMode.WithParty)
                 return IsPartyMedicated && ShouldBurst;
 
-            // Every 2 min mode - use at burst start with tools ready
-            if (PotionSetting == PotionMode.Every2Min)
+            // Opener (first 15 seconds)
+            if (CombatTime > 0 && CombatTime < 15)
+                return true;
+
+            // Opener only mode
+            if (PotionSetting == PotionMode.OpenerOnly)
+                return false;
+
+            // 6min burst (4:30 CD means: opener, then 6min, then 10:30min, etc.)
+            // So we use at: 0, 360s (6min), 720s (12min)...
+            if (PotionSetting == PotionMode.OpenerAnd6Min)
             {
-                return ShouldBurst
-                    && CyclePosition < 5f
-                    && ToolsAligned;
+                // 6 minute windows: 360-380s, 720-740s, etc.
+                float combatMod = CombatTime % 360f;
+                return combatMod < 20f && CombatTime >= 350f && ShouldBurst;
             }
 
             return false;
@@ -276,33 +173,49 @@ public sealed class UltimateMachinist : MachinistRotation
 
     #endregion
 
-    #region Hypercharge Logic
+    #region Queen Tracking (from MCH_Reborn)
 
-    /// <summary>
-    /// Safe to use Hypercharge? Check tool cooldowns
-    /// </summary>
-    public bool CanSafelyHypercharge
+    private readonly (byte from, byte to, int step)[] _stepPairs =
+    [
+        (0, 60, 0),
+        (60, 90, 1),
+        (90, 100, 2),
+        (100, 50, 3),
+        (50, 60, 4),
+        (60, 100, 5),
+        (100, 50, 6),
+        (50, 70, 7),
+        (70, 100, 8),
+        (100, 50, 9),
+        (50, 80, 10),
+        (70, 100, 11),
+        (100, 50, 12),
+        (50, 60, 13)
+    ];
+
+    private int _currentStep = 0;
+    private bool foundStepPair = false;
+    private byte _lastTrackedSummonBatteryPower = 0;
+
+    private void UpdateFoundStepPair()
     {
-        get
+        if (_currentStep < _stepPairs.Length)
         {
-            if (IsOverheated) return false;
-            if (Heat < 50 && !HasHypercharged) return false;
+            var (from, to, _) = _stepPairs[_currentStep];
+            foundStepPair = (LastSummonBatteryPower == from && Battery == to);
+        }
+        else
+        {
+            foundStepPair = false;
+        }
+    }
 
-            // Check tools have > 8s cooldown remaining
-            float drillCD = DrillPvE.Cooldown.RecastTimeRemainOneCharge;
-            float airAnchorCD = AirAnchorPvE.Cooldown.RecastTimeRemainOneCharge;
-            float chainsawCD = ChainSawPvE.Cooldown.RecastTimeRemainOneCharge;
-
-            // All tools must have > 8s or be ready (we'll use them first)
-            bool toolsSafe = (drillCD > 8f || drillCD == 0)
-                && (airAnchorCD > 8f || airAnchorCD == 0)
-                && (chainsawCD > 8f || chainsawCD == 0);
-
-            // Don't hypercharge if approaching burst and should pool
-            if (IsBurstApproaching && PoolSkillsForBurst && !ShouldBurst)
-                return false;
-
-            return toolsSafe || ShouldBurst;
+    public void UpdateQueenStep()
+    {
+        if (_lastTrackedSummonBatteryPower != LastSummonBatteryPower)
+        {
+            _lastTrackedSummonBatteryPower = LastSummonBatteryPower;
+            _currentStep++;
         }
     }
 
@@ -312,10 +225,30 @@ public sealed class UltimateMachinist : MachinistRotation
 
     protected override IAction? CountDownAction(float remainTime)
     {
-        // Pre-pull Reassemble
-        if (remainTime < 5f && remainTime > 3f)
+        if (AirAnchorCountdown && remainTime < 1f && AirAnchorPvE.EnoughLevel && AirAnchorPvE.CanUse(out IAction? act))
         {
-            if (ReassemblePvE.CanUse(out var act)) return act;
+            return act;
+        }
+
+        if (!AirAnchorCountdown && remainTime < 0.1f && AirAnchorPvE.EnoughLevel && AirAnchorPvE.CanUse(out act))
+        {
+            return act;
+        }
+
+        if (remainTime < 4.75f && ReassemblePvE.CanUse(out act))
+        {
+            return act;
+        }
+
+        // Potion in countdown
+        if (AirAnchorCountdown && ShouldBurst && OpenerBurstMeds && remainTime <= 1.5f && UseBurstMedicine(out act))
+        {
+            return act;
+        }
+
+        if (!AirAnchorCountdown && ShouldBurst && OpenerBurstMeds && remainTime <= 1f && UseBurstMedicine(out act))
+        {
+            return act;
         }
 
         return base.CountDownAction(remainTime);
@@ -323,135 +256,229 @@ public sealed class UltimateMachinist : MachinistRotation
 
     #endregion
 
+    #region Emergency Ability
+
+    protected override bool EmergencyAbility(IAction nextGCD, out IAction? act)
+    {
+        if (InCombat)
+        {
+            UpdateQueenStep();
+            UpdateFoundStepPair();
+        }
+
+        if (HyperchargePvE.EnoughLevel)
+        {
+            if (!WildfirePvE.EnoughLevel)
+            {
+                if (HyperchargePvE.CanUse(out act, skipTTKCheck: true))
+                {
+                    return true;
+                }
+            }
+            if (!FullMetalFieldPvE.EnoughLevel && (HasWildfire || (WildfirePvE.Cooldown.IsCoolingDown && Battery == 100)))
+            {
+                if (HyperchargePvE.CanUse(out act, skipTTKCheck: true))
+                {
+                    return true;
+                }
+            }
+            if (HasWildfire && IsLastAction(false, FullMetalFieldPvE))
+            {
+                if (HyperchargePvE.CanUse(out act, skipTTKCheck: true))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return base.EmergencyAbility(nextGCD, out act);
+    }
+
+    #endregion
+
     #region oGCD Logic
 
-    [RotationDesc(ActionID.ReassemblePvE, ActionID.WildfirePvE, ActionID.BarrelStabilizerPvE,
-        ActionID.HyperchargePvE, ActionID.GaussRoundPvE, ActionID.RicochetPvE)]
+    [RotationDesc(ActionID.TacticianPvE, ActionID.DismantlePvE)]
+    protected override bool DefenseAreaAbility(IAction nextGCD, out IAction? act)
+    {
+        if (IsOverheated || HasWildfire || HasFullMetalMachinist)
+        {
+            return base.DefenseAreaAbility(nextGCD, out act);
+        }
+
+        if (TacticianPvE.CanUse(out act))
+        {
+            return true;
+        }
+
+        if (!MitOverlap || (MitOverlap && !StatusHelper.PlayerHasStatus(true, StatusID.Tactician_1951)))
+        {
+            if (DismantlePvE.CanUse(out act))
+            {
+                return true;
+            }
+        }
+
+        return base.DefenseAreaAbility(nextGCD, out act);
+    }
+
     protected override bool AttackAbility(IAction nextGCD, out IAction? act)
     {
-        act = null;
+        // Skip if just used Wildfire (let FMF come first)
+        if (FullMetalFieldPvE.EnoughLevel && HasFullMetalMachinist && IsLastAction(false, WildfirePvE))
+        {
+            return base.AttackAbility(nextGCD, out act);
+        }
 
-        // Potion usage
+        // === POTION (NEW) ===
         if (ShouldUsePotion && InCombat && HasHostilesInRange)
         {
             if (UseBurstMedicine(out act)) return true;
         }
 
-        // Reassemble before tools (Air Anchor > Chainsaw > Drill priority)
-        if (!HasReassembled && InCombat)
+        // Reassemble Logic (with pooling)
+        bool isReassembleUsable =
+            ReassemblePvE.Cooldown.CurrentCharges > 0 && !HasReassembled &&
+            (nextGCD.IsTheSameTo(true, [ChainSawPvE, ExcavatorPvE])
+            || (!ChainSawPvE.EnoughLevel && nextGCD.IsTheSameTo(true, SpreadShotPvE) && ((IBaseAction)nextGCD).Target.AffectedTargets.Length >= (SpreadShotMasteryTrait.EnoughLevel ? 4 : 5))
+            || nextGCD.IsTheSameTo(false, [AirAnchorPvE])
+            || (!ChainSawPvE.EnoughLevel && nextGCD.IsTheSameTo(true, DrillPvE))
+            || (!DrillPvE.EnoughLevel && nextGCD.IsTheSameTo(true, CleanShotPvE))
+            || (!CleanShotPvE.EnoughLevel && nextGCD.IsTheSameTo(false, HotShotPvE)));
+
+        // Modified: Don't use if holding for burst (unless capping)
+        if (isReassembleUsable && (!ShouldHoldReassemble || ShouldBurst || ReassemblePvE.Cooldown.CurrentCharges == 2))
         {
-            bool nextIsTool = nextGCD.IsTheSameTo(true, AirAnchorPvE, ChainSawPvE, DrillPvE, ExcavatorPvE);
-            
-            if (nextIsTool)
+            if (ReassemblePvE.CanUse(out act, usedUp: true))
             {
-                // Use if bursting, or if cap prevention, or if not holding
-                if (ShouldBurst || ReassembleWillCap || !ShouldHoldReassemble)
-                {
-                    if (ReassemblePvE.CanUse(out act, usedUp: ReassembleWillCap)) return true;
-                }
+                return true;
             }
         }
 
-        // Wildfire - use at start of burst with first Hypercharge
-        if (ShouldBurst && HasHostilesInRange && !HasWildfire)
+        // Start Ricochet/Gauss cooldowns rolling
+        if (!RicochetPvE.Cooldown.IsCoolingDown)
         {
-            // Use Wildfire when we have heat for Hypercharge or during Overheated
-            // Wildfire snapshots buffs when applied, so use early in burst
-            if ((Heat >= 50 || HasHypercharged) && !IsOverheated)
+            if (CheckmatePvE.EnoughLevel && CheckmatePvE.CanUse(out act))
             {
-                if (WildfirePvE.CanUse(out act)) return true;
+                return true;
+            }
+            if (!CheckmatePvE.EnoughLevel && RicochetPvE.CanUse(out act))
+            {
+                return true;
+            }
+        }
+        if (!GaussRoundPvE.Cooldown.IsCoolingDown)
+        {
+            if (DoubleCheckPvE.EnoughLevel && DoubleCheckPvE.CanUse(out act))
+            {
+                return true;
+            }
+            if (!DoubleCheckPvE.EnoughLevel && GaussRoundPvE.CanUse(out act))
+            {
+                return true;
             }
         }
 
-        // Barrel Stabilizer - use AFTER first Hypercharge in 10xHB
-        // This gives us FMF (which we use during overheat) and free Hypercharge
-        if (InCombat && HasHostilesInRange && !HasFullMetalMachinist)
+        // Barrel Stabilizer (with pooling)
+        if (ShouldBurst || !ShouldHoldBarrelStabilizer)
         {
-            // During burst: use after first Hypercharge (when overheated)
-            if (ShouldBurst && IsOverheated && OverheatedStacks <= 3)
+            if (BarrelStabilizerPvE.CanUse(out act))
             {
-                if (BarrelStabilizerPvE.CanUse(out act)) return true;
-            }
-            // Outside burst: use freely to avoid drift
-            else if (!ShouldBurst && !ShouldHoldBarrelStabilizer)
-            {
-                if (BarrelStabilizerPvE.CanUse(out act)) return true;
+                return true;
             }
         }
 
-        // Hypercharge - use before Barrel Stabilizer in 10xHB rotation
-        if (CanSafelyHypercharge && HasHostilesInRange)
+        bool LowLevelHyperCheck = !AutoCrossbowPvE.EnoughLevel && SpreadShotPvE.CanUse(out _);
+
+        // Wildfire logic
+        if (ShouldBurst)
         {
-            // During burst - prioritize using stored heat first
-            if (ShouldBurst)
+            if (FullMetalFieldPvE.EnoughLevel)
             {
-                // First Hypercharge in burst (with Wildfire)
-                if (Heat >= 50 && !HasHypercharged)
+                if (Heat >= 50 || HasHypercharged)
                 {
-                    if (HyperchargePvE.CanUse(out act)) return true;
-                }
-                // Second Hypercharge (free from Barrel Stabilizer)
-                if (HasHypercharged)
-                {
-                    if (HyperchargePvE.CanUse(out act)) return true;
+                    if (WeaponRemain < (GCDTime(1) / 2) && nextGCD.IsTheSameTo(false, FullMetalFieldPvE))
+                    {
+                        if (WildfirePvE.CanUse(out act))
+                        {
+                            if ((WildfirePvE.Target.Target.IsBossFromIcon() && WildfireBoss) || !WildfireBoss)
+                            {
+                                return true;
+                            }
+                        }
+                    }
                 }
             }
-            // Outside burst - use if heat capping or free charge from BS
-            else if (HeatWillCap || HasHypercharged)
+            if (!FullMetalFieldPvE.EnoughLevel)
             {
-                if (HyperchargePvE.CanUse(out act)) return true;
+                if ((Heat >= 50 || HasHypercharged) && ToolChargeSoon(out _) && !LowLevelHyperCheck)
+                {
+                    if (WeaponRemain < (GCDTime(1) / 2))
+                    {
+                        if (WildfirePvE.CanUse(out act))
+                        {
+                            if ((WildfirePvE.Target.Target.IsBossFromIcon() && WildfireBoss) || !WildfireBoss)
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                }
             }
         }
 
         // Queen summon
-        if (ShouldSummonQueen && HasHostilesInRange)
+        if (UseQueen(out act, nextGCD))
         {
-            if (AutomatonQueenPvE.CanUse(out act)) return true;
+            return true;
         }
 
-        // Gauss Round and Ricochet / Double Check and Checkmate
-        // Use during Hypercharge, or to prevent capping charges
-        if (HasHostilesInRange)
+        // Hypercharge outside of burst (cap prevention)
+        if (!LowLevelHyperCheck && !HasReassembled && (!WildfirePvE.Cooldown.WillHaveOneCharge(30) || (Heat == 100)))
         {
-            // Prioritize during overheat to get max weaves
-            if (IsOverheated)
+            if (!(LiveComboTime <= 9f && LiveComboTime > 0f) && ToolChargeSoon(out act))
             {
-                if (DoubleCheckPvE.CanUse(out act, usedUp: true)) return true;
-                if (CheckmatePvE.CanUse(out act, usedUp: true)) return true;
-                if (GaussRoundPvE.CanUse(out act, usedUp: true)) return true;
-                if (RicochetPvE.CanUse(out act, usedUp: true)) return true;
+                return true;
             }
-            else
+        }
+
+        // Gauss/Ricochet weaving
+        var whichToUse = RicochetPvE.EnoughLevel switch
+        {
+            true when RicochetPvE.Cooldown.RecastTimeElapsed > GaussRoundPvE.Cooldown.RecastTimeElapsed => "Ricochet",
+            true when GaussRoundPvE.Cooldown.RecastTimeElapsed > RicochetPvE.Cooldown.RecastTimeElapsed => "GaussRound",
+            true => "Ricochet",
+            _ => "GaussRound"
+        };
+
+        if (!FullMetalFieldPvE.EnoughLevel || (FullMetalFieldPvE.EnoughLevel && !nextGCD.IsTheSameTo(false, FullMetalFieldPvE)))
+        {
+            switch (whichToUse)
             {
-                // Outside overheat - use to prevent cap
-                if (GaussRoundPvE.Cooldown.CurrentCharges >= 2)
-                {
-                    if (GaussRoundPvE.CanUse(out act)) return true;
-                }
-                if (RicochetPvE.Cooldown.CurrentCharges >= 2)
-                {
-                    if (RicochetPvE.CanUse(out act)) return true;
-                }
-                if (DoubleCheckPvE.Cooldown.CurrentCharges >= 2)
-                {
-                    if (DoubleCheckPvE.CanUse(out act)) return true;
-                }
-                if (CheckmatePvE.Cooldown.CurrentCharges >= 2)
-                {
-                    if (CheckmatePvE.CanUse(out act)) return true;
-                }
+                case "Ricochet":
+                    if (CheckmatePvE.EnoughLevel && CheckmatePvE.CanUse(out act, usedUp: ShouldBurst || IsOverheated))
+                    {
+                        return true;
+                    }
+                    if (!CheckmatePvE.EnoughLevel && RicochetPvE.CanUse(out act, usedUp: ShouldBurst || IsOverheated))
+                    {
+                        return true;
+                    }
+                    break;
+                case "GaussRound":
+                    if (DoubleCheckPvE.EnoughLevel && DoubleCheckPvE.CanUse(out act, usedUp: ShouldBurst || IsOverheated))
+                    {
+                        return true;
+                    }
+                    if (!DoubleCheckPvE.EnoughLevel && GaussRoundPvE.CanUse(out act, usedUp: ShouldBurst || IsOverheated))
+                    {
+                        return true;
+                    }
+                    break;
             }
         }
 
         return base.AttackAbility(nextGCD, out act);
-    }
-
-    [RotationDesc(ActionID.TacticianPvE, ActionID.DismantlePvE)]
-    protected override bool DefenseAreaAbility(IAction nextGCD, out IAction? act)
-    {
-        if (TacticianPvE.CanUse(out act)) return true;
-        if (DismantlePvE.CanUse(out act)) return true;
-        return base.DefenseAreaAbility(nextGCD, out act);
     }
 
     #endregion
@@ -460,72 +487,248 @@ public sealed class UltimateMachinist : MachinistRotation
 
     protected override bool GeneralGCD(out IAction? act)
     {
-        act = null;
-
-        // During Overheat - Blazing Shot spam with FMF
-        if (IsOverheated)
+        // Combo protection (from MCH_Reborn)
+        if (IsLastComboAction(true, SlugShotPvE) && LiveComboTime >= GCDTime(1) && LiveComboTime <= GCDTime(2) && !IsOverheated)
         {
-            // Full Metal Field - AoE GCD that doesn't consume Hypercharge stacks!
-            // Use this during Hypercharge for 10xHB optimization
-            if (HasFullMetalMachinist)
+            if (HeatedCleanShotPvE.EnoughLevel && HeatedCleanShotPvE.CanUse(out act))
             {
-                if (FullMetalFieldPvE.CanUse(out act)) return true;
+                return true;
             }
-
-            // Blazing Shot
-            if (BlazingShotPvE.CanUse(out act)) return true;
+            if (!HeatedCleanShotPvE.EnoughLevel && CleanShotPvE.CanUse(out act))
+            {
+                return true;
+            }
         }
 
-        // Excavator (proc from Chainsaw)
-        if (HasExcavatorReady)
+        if (IsLastComboAction(true, SplitShotPvE) && LiveComboTime >= GCDTime(1) && LiveComboTime <= GCDTime(2) && !IsOverheated)
         {
-            if (ExcavatorPvE.CanUse(out act)) return true;
+            if (HeatedSlugShotPvE.EnoughLevel && HeatedSlugShotPvE.CanUse(out act))
+            {
+                return true;
+            }
+            if (!HeatedSlugShotPvE.Info.EnoughLevelAndQuest() && SlugShotPvE.CanUse(out act))
+            {
+                return true;
+            }
         }
 
-        // Full Metal Field outside of Hypercharge (if somehow still have buff)
-        if (HasFullMetalMachinist && !IsOverheated)
+        // Overheated AoE
+        if (AutoCrossbowPvE.CanUse(out act))
         {
-            if (FullMetalFieldPvE.CanUse(out act)) return true;
+            return true;
         }
 
-        // Tool Priority during burst: Air Anchor > Chainsaw > Drill
-        if (ShouldBurst || !IsBurstApproaching)
+        // Overheated ST
+        if (BlazingShotPvE.EnoughLevel && BlazingShotPvE.CanUse(out act))
         {
-            // Air Anchor - highest priority
-            if (AirAnchorPvE.CanUse(out act)) return true;
+            return true;
+        }
+        if (!BlazingShotPvE.EnoughLevel && HeatBlastPvE.CanUse(out act))
+        {
+            return true;
+        }
 
-            // Chainsaw
-            if (!ShouldHoldChainsaw || ShouldBurst)
-            {
-                if (ChainSawPvE.CanUse(out act)) return true;
-            }
+        if (IsLastAction(false, HyperchargePvE) && HeatBlastPvE.EnoughLevel)
+        {
+            return base.GeneralGCD(out act);
+        }
 
-            // Drill
-            if (!ShouldHoldDrill || ShouldBurst || DrillWillCap)
+        // Bioblaster
+        if ((BioMove || (!IsMoving && !BioMove)) && BioblasterPvE.CanUse(out act, usedUp: true))
+        {
+            return true;
+        }
+
+        // Air Anchor
+        if (HotShotMasteryTrait.EnoughLevel && AirAnchorPvE.CanUse(out act))
+        {
+            return true;
+        }
+
+        // Drill (with pooling)
+        if (!ShouldHoldDrill || ShouldBurst || DrillPvE.Cooldown.CurrentCharges == 2)
+        {
+            if (DrillPvE.CanUse(out act, usedUp: false))
             {
-                if (DrillPvE.CanUse(out act)) return true;
+                return true;
             }
+        }
+
+        if (!HotShotMasteryTrait.EnoughLevel && HotShotPvE.CanUse(out act))
+        {
+            return true;
+        }
+
+        // Chainsaw (with pooling)
+        if (!ShouldHoldChainsaw || ShouldBurst)
+        {
+            if (ChainSawPvE.CanUse(out act))
+            {
+                return true;
+            }
+        }
+
+        // Excavator
+        if (ExcavatorPvE.CanUse(out act))
+        {
+            return true;
+        }
+
+        // Full Metal Field
+        if (!AirAnchorPvE.CanUse(out _) && !ChainSawPvE.CanUse(out _) && !ExcavatorPvE.CanUse(out _) && !HasExcavatorReady
+            && !IsLastGCD(false, ChainSawPvE) && DrillPvE.Cooldown.CurrentCharges < 2 && (!WildfirePvE.Cooldown.IsCoolingDown || IsLastAction(false, WildfirePvE)))
+        {
+            if (FullMetalFieldPvE.CanUse(out act))
+            {
+                return true;
+            }
+        }
+
+        // Second Drill charge
+        if (DrillPvE.CanUse(out act, usedUp: true))
+        {
+            return true;
+        }
+
+        // FMF expiring
+        if (StatusHelper.PlayerWillStatusEnd(3, true, StatusID.FullMetalMachinist))
+        {
+            if (FullMetalFieldPvE.CanUse(out act))
+            {
+                return true;
+            }
+        }
+
+        // Excavator expiring
+        if (StatusHelper.PlayerWillStatusEnd(3, true, StatusID.ExcavatorReady))
+        {
+            if (ExcavatorPvE.CanUse(out act))
+            {
+                return true;
+            }
+        }
+
+        // AoE
+        if (!IsOverheated)
+        {
+            if (ScattergunPvE.EnoughLevel)
+            {
+                if (ScattergunPvE.CanUse(out act))
+                {
+                    return true;
+                }
+            }
+            if (!ScattergunPvE.EnoughLevel)
+            {
+                if (SpreadShotPvE.CanUse(out act))
+                {
+                    return true;
+                }
+            }
+        }
+
+        // ST Combo
+        if (HeatedCleanShotPvE.EnoughLevel && HeatedCleanShotPvE.CanUse(out act))
+        {
+            return true;
+        }
+        if (!HeatedCleanShotPvE.EnoughLevel && CleanShotPvE.CanUse(out act))
+        {
+            return true;
+        }
+        if (HeatedSlugShotPvE.EnoughLevel && HeatedSlugShotPvE.CanUse(out act))
+        {
+            return true;
+        }
+        if (!HeatedSlugShotPvE.Info.EnoughLevelAndQuest() && SlugShotPvE.CanUse(out act))
+        {
+            return true;
+        }
+        if (HeatedSplitShotPvE.EnoughLevel && HeatedSplitShotPvE.CanUse(out act))
+        {
+            return true;
+        }
+        if (!HeatedSplitShotPvE.Info.EnoughLevelAndQuest() && SplitShotPvE.CanUse(out act))
+        {
+            return true;
+        }
+
+        return base.GeneralGCD(out act);
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    private bool ToolChargeSoon(out IAction? act)
+    {
+        float REST_TIME = 8f;
+        if
+            (!SpreadShotPvE.CanUse(out _)
+            &&
+            ((AirAnchorPvE.EnoughLevel && AirAnchorPvE.Cooldown.WillHaveOneCharge(REST_TIME))
+            ||
+            (!AirAnchorPvE.EnoughLevel && HotShotPvE.EnoughLevel && HotShotPvE.Cooldown.WillHaveOneCharge(REST_TIME))
+            ||
+            (DrillPvE.EnoughLevel && DrillPvE.Cooldown.WillHaveXCharges(DrillPvE.Cooldown.MaxCharges, REST_TIME))
+            ||
+            (ChainSawPvE.EnoughLevel && ChainSawPvE.Cooldown.WillHaveOneCharge(REST_TIME))))
+        {
+            act = null;
+            return false;
         }
         else
         {
-            // During pooling - only use if capping
-            if (DrillWillCap)
+            return HyperchargePvE.CanUse(out act, skipTTKCheck: true);
+        }
+    }
+
+    private bool UseQueen(out IAction? act, IAction nextGCD)
+    {
+        act = null;
+        if (!InCombat || IsRobotActive)
+            return false;
+
+        // Opener
+        if (Battery == 60 && IsLastGCD(false, ExcavatorPvE) && CombatTime < 15)
+        {
+            if (AutomatonQueenPvE.CanUse(out act, skipTTKCheck: true))
             {
-                if (DrillPvE.CanUse(out act)) return true;
+                return true;
+            }
+            if (!AutomatonQueenPvE.EnoughLevel && RookAutoturretPvE.CanUse(out act, skipTTKCheck: true))
+            {
+                return true;
             }
         }
 
-        // AoE rotation (3+ targets)
-        if (SpreadShotPvE.CanUse(out act)) return true;
-        if (ScattergunPvE.CanUse(out act)) return true;
+        // Step pair matching (from MCH_Reborn)
+        if (foundStepPair)
+        {
+            if (AutomatonQueenPvE.CanUse(out act, skipTTKCheck: true))
+            {
+                return true;
+            }
+            if (!AutomatonQueenPvE.EnoughLevel && RookAutoturretPvE.CanUse(out act, skipTTKCheck: true))
+            {
+                return true;
+            }
+        }
 
-        // Single target combo
-        if (HeatedCleanShotPvE.CanUse(out act)) return true;
-        if (HeatedSlugShotPvE.CanUse(out act)) return true;
-        if (HeatedSplitShotPvE.CanUse(out act)) return true;
-
-        // Fallback to base
-        return base.GeneralGCD(out act);
+        // Overcap protection
+        if ((nextGCD.IsTheSameTo(false, CleanShotPvE, HeatedCleanShotPvE) && Battery > 90)
+            || (nextGCD.IsTheSameTo(false, HotShotPvE, AirAnchorPvE, ChainSawPvE, ExcavatorPvE) && Battery > 80))
+        {
+            if (AutomatonQueenPvE.CanUse(out act, skipTTKCheck: true))
+            {
+                return true;
+            }
+            if (!AutomatonQueenPvE.EnoughLevel && RookAutoturretPvE.CanUse(out act, skipTTKCheck: true))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     #endregion
@@ -535,41 +738,28 @@ public sealed class UltimateMachinist : MachinistRotation
     public override void DisplayRotationStatus()
     {
         ImGui.TextColored(ImGuiColors.DalamudYellow, "=== Ultimate Machinist ===");
-        ImGui.Text($"Combat Time: {CombatTime:F1}s");
-        ImGui.Text($"Cycle Position: {CyclePosition:F1}s");
-        ImGui.Text($"Seconds Until Burst: {SecondsUntilBurst:F1}s");
+        ImGui.Text($"QueenStep: {_currentStep}");
+        ImGui.Text($"Step Pair Found: {foundStepPair}");
         ImGui.Separator();
-        
+
         ImGui.TextColored(ImGuiColors.HealerGreen, "Burst Status:");
-        ImGui.Text($"Is In 2Min Window: {IsIn2MinWindow}");
-        ImGui.Text($"Is Burst Approaching: {IsBurstApproaching}");
+        ImGui.Text($"Combat Time: {CombatTime:F1}s");
         ImGui.Text($"Should Burst: {ShouldBurst}");
         ImGui.Text($"Is Party Bursting: {IsPartyBursting}");
-        ImGui.Text($"Can 10xHB: {Can10xHB}");
+        ImGui.Text($"Is In 2Min Window: {IsIn2MinWindow}");
         ImGui.Separator();
-        
-        ImGui.TextColored(ImGuiColors.DalamudOrange, "Pooling Status:");
+
+        ImGui.TextColored(ImGuiColors.DalamudOrange, "Pooling:");
+        ImGui.Text($"Burst Approaching: {IsBurstApproaching} ({SecondsUntilBurst:F0}s)");
         ImGui.Text($"Hold Reassemble: {ShouldHoldReassemble}");
         ImGui.Text($"Hold Drill: {ShouldHoldDrill}");
         ImGui.Text($"Hold Chainsaw: {ShouldHoldChainsaw}");
-        ImGui.Text($"Hold Barrel Stab: {ShouldHoldBarrelStabilizer}");
         ImGui.Separator();
-        
-        ImGui.TextColored(ImGuiColors.DalamudRed, "Cap Prevention:");
-        ImGui.Text($"Reassemble Will Cap: {ReassembleWillCap}");
-        ImGui.Text($"Drill Will Cap: {DrillWillCap}");
-        ImGui.Text($"Battery Will Cap: {BatteryWillCap}");
-        ImGui.Text($"Heat Will Cap: {HeatWillCap}");
-        ImGui.Separator();
-        
-        ImGui.TextColored(ImGuiColors.TankBlue, "Gauges:");
-        ImGui.Text($"Heat: {Heat}");
-        ImGui.Text($"Battery: {Battery}");
-        ImGui.Text($"Is Overheated: {IsOverheated}");
-        ImGui.Text($"Has Wildfire: {HasWildfire}");
-        ImGui.Text($"Has FMF Ready: {HasFullMetalMachinist}");
-        ImGui.Text($"Has Excavator Ready: {HasExcavatorReady}");
-        
+
+        ImGui.TextColored(ImGuiColors.TankBlue, "Potion:");
+        ImGui.Text($"Should Use Potion: {ShouldUsePotion}");
+        ImGui.Text($"Party Medicated: {IsPartyMedicated}");
+
         base.DisplayRotationStatus();
     }
 
