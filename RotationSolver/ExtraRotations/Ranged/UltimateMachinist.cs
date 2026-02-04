@@ -52,6 +52,7 @@ public sealed class UltimateMachinist : MachinistRotation
         [Description("Never")] Never,
         [Description("Opener Only")] OpenerOnly,
         [Description("Opener + 6min burst (4:30 CD)")] OpenerAnd6Min,
+        [Description("Opener + 8min burst (4:30 CD)")] OpenerAnd8Min,
         [Description("With Party (when others use)")] WithParty
     }
 
@@ -151,13 +152,18 @@ public sealed class UltimateMachinist : MachinistRotation
             if (PotionSetting == PotionMode.OpenerOnly)
                 return false;
 
-            // 6min burst (4:30 CD means: opener, then 6min, then 10:30min, etc.)
-            // So we use at: 0, 360s (6min), 720s (12min)...
+            // 6min burst (4:30 CD)
+            // Window: 350s (5:50) to 440s (7:20) - Allows for ~1.5 min burst delay
             if (PotionSetting == PotionMode.OpenerAnd6Min)
             {
-                // 6 minute windows: 360-380s, 720-740s, etc.
-                float combatMod = CombatTime % 360f;
-                return combatMod < 20f && CombatTime >= 350f && ShouldBurst;
+                return CombatTime >= 350f && CombatTime < 440f && ShouldBurst;
+            }
+
+            // 8min burst (4:30 CD)
+            // Window: 470s (7:50) to 560s (9:20)
+            if (PotionSetting == PotionMode.OpenerAnd8Min)
+            {
+                return CombatTime >= 470f && CombatTime < 560f && ShouldBurst;
             }
 
             return false;
@@ -688,6 +694,16 @@ public sealed class UltimateMachinist : MachinistRotation
             {
                 return true;
             }
+        }
+
+        // BURST OPTIMIZATION: Force Queen if bursting (ignore step logic)
+        // We want Queen damages inside raid buffs!
+        if (ShouldBurst && Battery >= 50 && !IsRobotActive)
+        {
+             if (AutomatonQueenPvE.CanUse(out act, skipTTKCheck: true))
+             {
+                 return true;
+             }
         }
 
         // Step pair matching (from MCH_Reborn)
