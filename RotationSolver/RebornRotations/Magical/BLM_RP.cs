@@ -1,6 +1,6 @@
 ﻿namespace RotationSolver.RebornRotations.Magical;
 
-[Rotation("RebornPowerdox(TESTING)", CombatType.PvE, GameVersion = "7.35")]
+[Rotation("RebornPowerdox(TESTING)", CombatType.PvE, GameVersion = "7.4")]
 [SourceCode(Path = "main/BasicRotations/Magical/BLM_RP.cs")]
 
 public class BLM_RP : BlackMageRotation
@@ -133,7 +133,7 @@ public class BLM_RP : BlackMageRotation
             return true;
         }
 
-        if ((IsPolyglotStacksMaxed && (EnochianEndAfterGCD(0) || AmplifierPvE.Cooldown.WillHaveOneChargeGCD(0))) || Player.HasStatus(true, StatusID.LeyLines))
+        if ((IsPolyglotStacksMaxed && (EnochianEndAfterGCD(0) || AmplifierPvE.Cooldown.WillHaveOneChargeGCD(0))) || HasLeyLines)
         {
             if (FoulPvE.CanUse(out act, skipAoeCheck: !XenoglossyPvE.EnoughLevel))
             {
@@ -169,7 +169,7 @@ public class BLM_RP : BlackMageRotation
             }
         }
 
-        if (Player.HasStatus(true, StatusID.Firestarter))
+        if (HasFire)
         {
             if (FireIiiPvE.CanUse(out act))
             {

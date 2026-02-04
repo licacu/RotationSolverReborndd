@@ -13,7 +13,17 @@ internal partial class Configs : IPluginConfiguration
     public const string
         BasicTimer = "BasicTimer",
         BasicAutoSwitch = "BasicAutoSwitch",
-        BasicParams = "BasicParams",
+		DutySpecifcPvP = "DutySpecifcPvP",
+		DutySpecifcFieldOps = "DutySpecifcFieldOps",
+		DutySpecifcAlliance = "DutySpecifcAlliance",
+		DutySpecifcDeepDungeon = "DutySpecifcDeepDungeon",
+		DutySpecifcVariantDungeon = "DutySpecifcVariantDungeon",
+		DutySpecifcChaoticAlliance = "DutySpecifcChaoticAlliance",
+		DutySpecifcDungeon = "DutySpecifcDungeon",
+		DutySpecifcUltimate = "DutySpecifcUltimate",
+		DutySpecifcExtreme = "DutySpecifcExtreme",
+		DutySpecifcSavage = "DutySpecifcSavage",
+		BasicParams = "BasicParams",
         UiInformation = "UiInformation",
         UiWindows = "UiWindows",
         PvPSpecificControls = "PvPSpecificControls",
@@ -32,7 +42,7 @@ internal partial class Configs : IPluginConfiguration
     public int Version { get; set; } = CurrentVersion;
 
     public string LastSeenChangelog { get; set; } = "0.0.0.0";
-    public bool FirstTimeSetupDone { get; set; } = false;
+    public bool TutorialDone { get; set; } = false;
 
     public List<ActionEventInfo> Events { get; private set; } = [];
     public SortedSet<Job> DisabledJobs { get; private set; } = [];
@@ -43,11 +53,177 @@ internal partial class Configs : IPluginConfiguration
     public MacroInfo DutyStart { get; set; } = new MacroInfo();
     public MacroInfo DutyEnd { get; set; } = new MacroInfo();
 
-    [ConditionBool, UI("Attempt to mitigate high latency to the servers (Experimental)",
-    Filter = AutoActionUsage, Section = 6)]
-    private static readonly bool _lagMitigation = false;
+	#region Duty Specific
+	[ConditionBool, UI("O12S - Packet Filter logic.",
+	Description = "Treat OmegaM/OmegaF as immune if you have their corresponding Packet Filter status (also applies to Normal).",
+	Filter = DutySpecifcSavage)]
+	private static readonly bool _o12sOmegaMF = true;
 
-    [ConditionBool, UI("Intercept player input and queue it for RSR to execute the action. (PvE only)",
+	[ConditionBool, UI("M8S - Wolf Pack/Stone Pack logic.",
+	Description = "Treat Wolf of Wind/Wolf of Stone as immune if you don't have the corresponding status for it.",
+	Filter = DutySpecifcSavage)]
+	private static readonly bool _m8sWindStone = true;
+
+	[ConditionBool, UI("M9S - Only use cleave logic.",
+	Description = "This should clear up any targeting issues when a nail, the boss, and a flail are near each other at the same time.",
+	Filter = DutySpecifcSavage)]
+	private static readonly bool _m9sCleaveOnly = true;
+
+	[ConditionBool, UI("M9S - Cell Targeting logic.",
+	Description = "Treat Cells as immune if you don't have the corresponding status for it.",
+	Filter = DutySpecifcSavage)]
+	private static readonly bool _m9sCellTargeting = true;
+
+	[ConditionBool, UI("M9S - Ads Targeting logic.",
+	Description = "Prioritize Doornail or Flail based on role and distance to target.",
+	Filter = DutySpecifcSavage)]
+	private static readonly bool _m9sAdsTargeting = true;
+
+	[ConditionBool, UI("M10S - Firesnaking/Watersnaking targeting logic.",
+	Description = "Priotize Red Hot if you have firesnaking buff, and Deep Blue if you have watersnaking buff (also applies to Normal).",
+	Filter = DutySpecifcSavage)]
+	private static readonly bool _m10sBroTargeting = true;
+
+	[ConditionBool, UI("Limitless Blue Extreme - Whaleback logic.",
+	Description = "Treat Bismark Shell/Bismark Corona as immune if you don't have the Whaleback status",
+	Filter = DutySpecifcExtreme)]
+	private static readonly bool _limitlessBlueTargeting = true;
+
+	[ConditionBool, UI("Cinder Drift Extreme - Pall Targeting logic.",
+	Description = "Treat Pall of Rage/Pall of Grief as immune if you don't have the corresponding status for it.",
+	Filter = DutySpecifcExtreme)]
+	private static readonly bool _cinderDriftPallTargeting = true;
+
+	[ConditionBool, UI("The Epic of Alexander (Ultimate) - Jagd Doll logic.",
+	Description = "Treat Jagd Doll ads as immune when HP is less than 25%.",
+	Filter = DutySpecifcUltimate)]
+	private static readonly bool _teaJagdDoll = true;
+
+	[ConditionBool, UI("The Epic of Alexander (Ultimate) - True Heart logic.",
+	Description = "Treat True Heart ad as immune.",
+	Filter = DutySpecifcUltimate)]
+	private static readonly bool _teaTrueHeart = true;
+
+	[ConditionBool, UI("The Omega Protocol (Ultimate) - Packet Filter logic.",
+	Description = "Treat OmegaM/OmegaF as immune if you have their corresponding Packet Filter status.",
+	Filter = DutySpecifcUltimate)]
+	private static readonly bool _topOmegaMF = true;
+
+	[ConditionBool, UI("Futures Rewritten (Ultimate) - Crystal Of Darkness logic.",
+	Description = "Treat Crystal Of Darkness ad as immune.",
+	Filter = DutySpecifcUltimate)]
+	private static readonly bool _fruCrystalOfDarkness = true;
+
+	[ConditionBool, UI("The Ghimlyt Dark - Colossus Rubricatus ad.",
+	Description = "Treat Colossus Rubricatus as immune while its casting scripted action which leads to its death.",
+	Filter = DutySpecifcDungeon)]
+	private static readonly bool _colossusRubricatusImmune = true;
+
+	[ConditionBool, UI("Dohn Mheg - Liars Lyre mechancic.",
+	Description = "Treat Liars Lyre as immune if you don't have the Unfooled status.",
+	Filter = DutySpecifcDungeon)]
+	private static readonly bool _dohnMhegLyre = true;
+
+	[ConditionBool, UI("The Meso Terminal - Thanatos logic.",
+	Description = "Treat Jailers in second boss fight as immune if you don't have corresponding buff.",
+	Filter = DutySpecifcDungeon)]
+	private static readonly bool _jailerImmune = true;
+
+	[ConditionBool, UI("Forked Tower - Dead Star logic.",
+	Description = "Treat Triton/Nereid/Phobos as immune if you don't have the corresponding status for it.",
+	Filter = DutySpecifcFieldOps)]
+	private static readonly bool _forkedtowerDeadStar = true;
+
+	[ConditionBool, UI("Pilgrim's Traverse - Eminent Grief logic.",
+	Description = "Treat Eminent Grief as immune if you don't have Light Vengeance buff, and treat Devoured Eater as immune if you don't have Dark Vengeance buff.",
+	Filter = DutySpecifcDeepDungeon)]
+	private static readonly bool _eminent = true;
+
+	[ConditionBool, UI("The Labyrinth of the Ancients - Thanatos logic.",
+	Description = "Treat Thanatos as immune if you don't have Astral Realignment buff.",
+	Filter = DutySpecifcAlliance)]
+	private static readonly bool _thanatosImmune = true;
+
+	[ConditionBool, UI("The Void Ark - Irminsul and Sawtooth logic.",
+	Description = "Treat Irminsul and Sawtooth as immune if you don't have corresponding buff.",
+	Filter = DutySpecifcAlliance)]
+	private static readonly bool _irminsulSawtoothImmune = true;
+
+	[ConditionBool, UI("The Puppets' Bunker - Superior Flight Unit logic.",
+	Description = "Treat each Superior Flight Unit as immune if you don't have corresponding buff.",
+	Filter = DutySpecifcAlliance)]
+	private static readonly bool _superiorFlightUnitImmune = true;
+
+	[ConditionBool, UI("The Tower at Paradigm's Breach - Hansel and Gretel logic.",
+	Description = "Treat each Hansel/Gretel as immune if you are at an angle that would cause you to take rebound damage from the shield mechanic.",
+	Filter = DutySpecifcAlliance)]
+	private static readonly bool _hanselorGretelShieldedImmune = true;
+
+	[ConditionBool, UI("Jeuno: The First Walk - The Ark Angels logic.",
+	Description = "Treat each Ark Angel as immune if you don't have corresponding buff.",
+	Filter = DutySpecifcAlliance)]
+	private static readonly bool _jeunoBossImmune = true;
+
+	[ConditionBool, UI("Cloud of Darkness - Ads phase logic.",
+	Description = "Treat Cloud of Darkness/Stygian as immune if you don't have corresponding buff.",
+	Filter = DutySpecifcChaoticAlliance)]
+	private static readonly bool _codImmune = true;
+
+	[ConditionBool, UI("The Sil'dihn Subterrane - Drakefamily ads logic.",
+	Description = "Custom logic to treat certain drakes as immune to kill them in a specific order for the purposes Variant path 12.",
+	Filter = DutySpecifcVariantDungeon)]
+	private static readonly bool _drakeImmune = true;
+	#endregion
+
+	#region PvP
+	[JobConfig, UI("The HP for using Guard.",
+		Filter = DutySpecifcPvP)]
+	[Range(0, 1, ConfigUnitType.Percent, 0.02f)]
+	public float HealthForGuard { get; set; } = 0.15f;
+
+	[ConditionBool, UI("Ignore TTK for PvP purposes.", Filter = DutySpecifcPvP)]
+	private static readonly bool _ignorePvPTTK = true;
+
+	[ConditionBool, UI("Prioritize A tier tomeliths in Shatter.", Filter = DutySpecifcPvP)]
+	private static readonly bool _prioAtomelith = false;
+
+	[ConditionBool, UI("Prioritize B tier tomeliths in Shatter.", Filter = DutySpecifcPvP)]
+	private static readonly bool _prioBtomelith = false;
+
+	[JobConfig, UI("Ignore Invincibility for PvP purposes.", Filter = DutySpecifcPvP)]
+	private static readonly bool _ignorePvPInvincibility = false;
+
+	[ConditionBool, UI("Auto turn off when dead in PvP.",
+		 Filter = DutySpecifcPvP)]
+	private static readonly bool _autoOffWhenDeadPvP = true;
+
+	[ConditionBool, UI("Auto turn off when PvP match ends.",
+		 Filter = DutySpecifcPvP)]
+	private static readonly bool _autoOffPvPMatchEnd = true;
+
+	[ConditionBool, UI("Auto turn on when PvP match starts.",
+		 Filter = DutySpecifcPvP)]
+	private static readonly bool _autoOnPvPMatchStart = true;
+
+	[ConditionBool, UI("Set RSR to PvP specific state when enabled in PvP zone.",
+		 Filter = DutySpecifcPvP)]
+	private static readonly bool _pvpStateControl = false;
+
+	[ConditionBool, UI("Don't use any actions while in Guard (Experimental).",
+		 Filter = DutySpecifcPvP)]
+	private static readonly bool _pvpGuardControl = true;
+
+	[ConditionBool, UI("Lock out GCD cycle if you are below 50% HP and have over 2000 MP for heals (Experimental).",
+		 Filter = DutySpecifcPvP)]
+	private static readonly bool _pvpGCDLockControl = true;
+
+	[ConditionBool, UI("Allow Sprint when no target is set even if youre in range of hostiles (Experimental).",
+		 Filter = DutySpecifcPvP)]
+	private static readonly bool _pvpAllowSprintWithoutTarget = true;
+
+	#endregion
+
+	[ConditionBool, UI("Intercept player input and queue it for RSR to execute the action. (PvE only)",
     Filter = AutoActionUsage, Section = 5)]
     private static readonly bool _interceptAction2 = false;
 
@@ -170,12 +346,20 @@ internal partial class Configs : IPluginConfiguration
     Filter = AutoActionUsage)]
     private static readonly bool _useHpPotions = false;
 
-    [ConditionBool, UI("Automatically use MP Potions",
+	[UI("Use HP Potions when HP% is lower than this", Parent = nameof(UseHpPotions))]
+	[Range(0, 1, ConfigUnitType.Percent, 0.002f)]
+	public float UseHpPotionsPercent { get; set; } = 0.5f;
+
+	[ConditionBool, UI("Automatically use MP Potions",
     Description = "Enable to allow the plugin to use MP potions automatically.",
     Filter = AutoActionUsage)]
     private static readonly bool _useMpPotions = false;
 
-    [ConditionBool, UI("Automatically use Phoenix Down",
+	[UI("Use MP Potions when MP% is lower than this", Parent = nameof(UseMpPotions))]
+	[Range(0, 1, ConfigUnitType.Percent, 0.002f)]
+	public float UseMpPotionsPercent { get; set; } = 0.5f;
+
+	[ConditionBool, UI("Automatically use Phoenix Down",
     Description = "Enable to allow the plugin to use Phoenix Down item. (Experimental feature)",
     Filter = AutoActionUsage)]
     private static readonly bool _usePhoenixDown = false;
@@ -209,21 +393,25 @@ internal partial class Configs : IPluginConfiguration
         Filter = BasicAutoSwitch, Section = 1)]
     private static readonly bool _cancelStateOnCombatBeforeCountdown = false;
 
-    [ConditionBool, UI("Auto turn on manual mode when attacked.",
-        Filter = BasicAutoSwitch, Section = 1)]
-    private static readonly bool _startOnAttackedBySomeone = false;
+	[ConditionBool, UI("I understand that Auto On settings will turn RSRs autorotation on, automatically.",
+		Filter = BasicAutoSwitch, Section = 1)]
+	private static readonly bool _AutoOnYes = false;
+
+	[ConditionBool, UI("Auto turn on manual mode when attacked.",
+			   Parent = nameof(AutoOnYes))]
+    private static readonly bool _startOnAttackedBySomeone2 = false;
     
     [ConditionBool, UI("Auto turn on auto mode when party is in combat.",
-         Filter = BasicAutoSwitch, Section = 1)]
-    private static readonly bool _startOnPartyIsInCombat = false;
+			   Parent = nameof(AutoOnYes))]
+    private static readonly bool _startOnPartyIsInCombat2 = false;
     
     [ConditionBool, UI("Auto turn on auto mode when alliance is in combat.",
-         Filter = BasicAutoSwitch, Section = 1)]
-    private static readonly bool _startOnAllianceIsInCombat = false;
+			   Parent = nameof(AutoOnYes))]
+    private static readonly bool _startOnAllianceIsInCombat2 = false;
     
     [ConditionBool, UI("Auto turn on auto mode when in combat in Bozja/Eureka/Occult Fate/CE",
-         Filter = BasicAutoSwitch, Section = 1)]
-    private static readonly bool _startOnFieldOpInCombat = false;
+			   Parent = nameof(AutoOnYes))]
+    private static readonly bool _startOnFieldOpInCombat2 = false;
 
     /// <markdown file="Auto" name="Use healing abilities when playing a non-healer role" section="Healing Usage and Control">
     /// Allow usage of healing abilities when not playing as a healer (such as Vercure, Bloodbath, etc.)
@@ -245,11 +433,11 @@ internal partial class Configs : IPluginConfiguration
     [ConditionBool, UI("Stop casting if the target dies.", Filter = Extra)]
     private static readonly bool _useStopCasting = false;
 
-    /// <markdown file="Auto" name="Cleanse all dispellable debuffs" section="Action Usage and Control">
-    /// Enabling this setting will force the usage of Esuna on all target that are affected by a
-    /// cleansable debuff.
-    /// </markdown>
-    [ConditionBool, UI("Cleanse all dispellable debuffs regardless of healing.",
+	/// <markdown file="Auto" name="Cleanse all dispellable debuffs" section="Action Usage and Control">
+	/// Enabling this setting will force the usage of Esuna on all target that are affected by a
+	/// cleansable debuff.
+	/// </markdown>
+	[ConditionBool, UI("Cleanse all dispellable debuffs regardless of healing.",
         Filter = AutoActionUsage, Section = 3,
         PvEFilter = JobFilterType.Dispel, PvPFilter = JobFilterType.NoJob)]
     private static readonly bool _dispelAll = false;
@@ -257,7 +445,7 @@ internal partial class Configs : IPluginConfiguration
     [ConditionBool, UI("Debug Mode", Filter = Debug)]
     private static readonly bool _inDebug = false;
 
-    [ConditionBool, UI("Make /rotation Manual a toggle command.",
+	[ConditionBool, UI("Make /rotation Manual a toggle command.",
         Filter = BasicParams)]
     private static readonly bool _toggleManual = false;
 
@@ -360,11 +548,26 @@ internal partial class Configs : IPluginConfiguration
     [ConditionBool, UI("Auto-use oGCD abilities", Filter = AutoActionUsage)]
     private static readonly bool _useAbility = true;
 
-    [ConditionBool, UI("Use defensive abilities", Description = "It is recommended to check this option if you are playing Raids or you can plan the heal and defense ability usage by yourself.",
-        Parent = nameof(UseAbility))]
+	[ConditionBool, UI("Use defensive actions", Filter = AutoActionUsage, Description = "It is recommended to check this option if you are playing Raids or you can plan the heal and defense ability usage by yourself.")]
     private static readonly bool _useDefenseAbility = true;
 
-    [ConditionBool, UI("Automatically activate tank stance", Parent = nameof(UseAbility),
+	[ConditionBool, UI("Automatically use Single Target defensive actions", Filter = AutoActionUsage, Parent = nameof(UseDefenseAbility))]
+	private static readonly bool _useSTDefense = true;
+
+	[ConditionBool, UI("Automatically use AOE defensive actions", Filter = AutoActionUsage, Parent = nameof(UseDefenseAbility))]
+	private static readonly bool _useAOEDefense = true;
+
+	[UI("Number of hostiles", Parent = nameof(UseDefenseAbility),
+		PvEFilter = JobFilterType.Tank)]
+	[Range(1, 8, ConfigUnitType.None, 0.05f)]
+	public int AutoDefenseNumber { get; set; } = 2;
+
+	[JobConfig, Range(0, 1, ConfigUnitType.Percent, 0.02f)]
+	[UI("HP%% needed to use single/self targetted mitigation on Tanks", Parent = nameof(UseDefenseAbility),
+		PvEFilter = JobFilterType.Tank)]
+	private readonly float _healthForAutoDefense = 1;
+
+	[ConditionBool, UI("Automatically activate tank stance", Parent = nameof(UseAbility),
         PvEFilter = JobFilterType.Tank)]
     private static readonly bool _autoTankStance = true;
 
@@ -387,7 +590,7 @@ internal partial class Configs : IPluginConfiguration
     [ConditionBool, UI("Use movement speed increase abilities when out of combat and out of duty.", Parent = nameof(UseAbility))]
     private static readonly bool _autoSpeedOutOfCombatNoDuty = false;
 
-    [ConditionBool, UI("Use beneficial ground-targeted actions", Description = "1.    Self-Target Fallback:\r\nIf range is zero, always targets the player and returns all affectable targets at the player's position.\r\n2.    Preferred Positions (OnLocations):\r\n•    Tries to get predefined beneficial positions for the current territory.\r\n•    If none are found and the content is a trial or raid, uses fallback points (e.g., 0,0 or 100,100 point as those are the center of arenas most of the time).\r\n•    Picks the closest point to the player, applies a small random offset, and checks if it’s within effect range.\r\n•    If so, returns that as the target area.\r\n3.    Boss Positional Fallback:\r\n•    If the current target is a boss with positional requirements and within range, uses the boss’s position (or a point within range) as the target area.\r\n4.    Party Member Fallback:\r\n•    Gathers party members within range + effect range.\r\n•    Attempts to find a party member who is being attacked (tank or focus target).\r\n•    If found, calculates whether to stay at the player’s position or move closer to the tank, based on distances and effect range.\r\n•    If not found or not needed, defaults to the player’s position.", Section = 3)]
+    [ConditionBool, UI("Use beneficial ground-targeted actions", Description = "1.    Self-Target Fallback:\r\nIf range is zero, always targets the player and returns all affectable targets at the player's position.\r\n2.    Preferred Positions (OnLocations):\r\n•    Tries to get predefined beneficial positions for the current territory.\r\n•    If none are found and the content is a trial or raid, uses fallback points (e.g., 0,0 or 100,100 point as those are the center of arenas most of the time).\r\n•    Picks the closest point to the player, applies a small random offset, and checks if it’s within effect range.\r\n•    If so, returns that as the target area.\r\n3.    Boss Positional Fallback:\r\n•    If the current target is a boss with positional requirements and within range, uses the boss’s position (or a point within range) as the target area.\r\n4.    Party Member Fallback:\r\n•    Gathers party members within range + effect range.\r\n•    Attempts to find a party member who is being attacked (tank or focus target).\r\n•    If found, calculates whether to stay at the player’s position or move closer to the tank, based on distances and effect range.\r\n•    If not found or not needed, defaults to the player’s position.", Filter = HealingActionCondition, Section = 3)]
     private static readonly bool _useGroundBeneficialAbility = true;
 
     /// <markdown file="Auto" name="Use beneficial ground-targeted actions when moving" section="Healing Usage and Control">
@@ -399,7 +602,10 @@ internal partial class Configs : IPluginConfiguration
     [JobConfig, UI("Use beneficial ground-targeted actions only on self, skipping other logic.", Parent = nameof(UseGroundBeneficialAbility))]
     private static readonly bool _useGroundBeneficialAbilityOnlySelf = false;
 
-    [ConditionBool, UI("Show Cooldown Window", Filter = UiWindows)]
+	[JobConfig, UI("Use beneficial ground-targeted actions on party Tank if present, skipping other logic.", Parent = nameof(UseGroundBeneficialAbility))]
+	private static readonly bool _useTargetTankForGroundHeal = false;
+
+	[ConditionBool, UI("Show Cooldown Window", Filter = UiWindows)]
     private static readonly bool _showCooldownWindow = false;
 
     [ConditionBool, UI("Show Action Timeline Window", Filter = UiWindows)]
@@ -743,11 +949,6 @@ internal partial class Configs : IPluginConfiguration
     Filter = Extra)]
     private static readonly bool _showCactbotToasts = false;
 
-    [JobConfig, UI("The HP for using Guard.",
-        Filter = PvPSpecificControls)]
-    [Range(0, 1, ConfigUnitType.Percent, 0.02f)]
-    public float HealthForGuard { get; set; } = 0.15f;
-
     [UI("Highlight color.", Parent = nameof(TeachingMode))]
     public Vector4 TeachingModeColor { get; set; } = new(0f, 1f, 0f, 1f);
 
@@ -803,7 +1004,7 @@ internal partial class Configs : IPluginConfiguration
         Filter = TargetConfig, Section = 3)]
     private static readonly bool _switchTargetFriendly = false;
 
-    [ConditionBool, UI("Set target to closest targetable enemy if no valid action target nearby and target not set",
+    [ConditionBool, UI("Set target to closest targetable enemy if no valid action target nearby and target not set (This works in Manual mode as well)",
         Filter = TargetConfig, Section = 3)]
     private static readonly bool _targetFreely = false;
 
@@ -902,42 +1103,6 @@ internal partial class Configs : IPluginConfiguration
     [Range(0, 10, ConfigUnitType.None)]
     public int TargetingIndex { get; set; }
 
-    [UI("Number of hostiles", Parent = nameof(UseDefenseAbility),
-        PvEFilter = JobFilterType.Tank)]
-    [Range(1, 8, ConfigUnitType.None, 0.05f)]
-    public int AutoDefenseNumber { get; set; } = 2;
-
-    #endregion
-
-    #region PvP
-    [ConditionBool, UI("Ignore TTK for PvP purposes.", Filter = PvPSpecificControls)]
-    private static readonly bool _ignorePvPTTK = true;
-
-    [ConditionBool, UI("Prioritize A tier tomeliths in Shatter.", Filter = PvPSpecificControls)]
-    private static readonly bool _prioAtomelith = false;
-
-    [ConditionBool, UI("Prioritize B tier tomeliths in Shatter.", Filter = PvPSpecificControls)]
-    private static readonly bool _prioBtomelith = false;
-
-    [JobConfig, UI("Ignore Invincibility for PvP purposes.", Filter = PvPSpecificControls)]
-    private static readonly bool _ignorePvPInvincibility = false;
-
-    [ConditionBool, UI("Auto turn off when dead in PvP.",
-         Filter = PvPSpecificControls)]
-    private static readonly bool _autoOffWhenDeadPvP = true;
-
-    [ConditionBool, UI("Auto turn off when PvP match ends.",
-         Filter = PvPSpecificControls)]
-    private static readonly bool _autoOffPvPMatchEnd = true;
-
-    [ConditionBool, UI("Auto turn on when PvP match starts.",
-         Filter = PvPSpecificControls)]
-    private static readonly bool _autoOnPvPMatchStart = true;
-
-    [ConditionBool, UI("Set RSR to PvP specific state when enabled in PvP zone.",
-         Filter = PvPSpecificControls)]
-    private static readonly bool _pvpStateControl = false;
-
     #endregion
 
     #region Jobs
@@ -1018,11 +1183,6 @@ internal partial class Configs : IPluginConfiguration
         Filter = AutoActionUsage, Section = 3,
         PvEFilter = JobFilterType.Tank, PvPFilter = JobFilterType.NoJob)]
     private readonly float _healthForDyingTanks = 0.15f;
-
-    [JobConfig, Range(0, 1, ConfigUnitType.Percent, 0.02f)]
-    [UI("HP%% needed to use single/self targetted mitigation on Tanks", Parent = nameof(UseDefenseAbility),
-        PvEFilter = JobFilterType.Tank)]
-    private readonly float _healthForAutoDefense = 1;
 
     [JobConfig]
     private readonly string _PvPRotationChoice = string.Empty;

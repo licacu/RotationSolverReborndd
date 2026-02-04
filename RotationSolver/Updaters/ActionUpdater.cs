@@ -6,7 +6,6 @@ using ECommons.GameHelpers;
 using ECommons.Logging;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using RotationSolver.Commands;
-using RotationSolver.Helpers;
 
 namespace RotationSolver.Updaters;
 
@@ -58,8 +57,8 @@ internal static class ActionUpdater
 
     internal static void UpdateNextAction()
     {
-        IPlayerCharacter localPlayer = Player.Object;
-        ICustomRotation? customRotation = DataCenter.CurrentRotation;
+		IPlayerCharacter? localPlayer = Player.Object;
+		ICustomRotation? customRotation = DataCenter.CurrentRotation;
 
         try
         {
@@ -210,27 +209,26 @@ internal static class ActionUpdater
 
     private static void UpdateMPTimer(DateTime now)
     {
-        var player = Player.Object;
-        if (player == null)
+        if (Player.Object == null)
         {
             return;
         }
 
-        if (player.ClassJob.RowId != (uint)ECommons.ExcelServices.Job.BLM)
+        if (Player.Object.ClassJob.RowId != (uint)ECommons.ExcelServices.Job.BLM)
         {
             return;
         }
 
-        if (player.HasStatus(true, StatusID.LucidDreaming))
+        if (StatusHelper.PlayerHasStatus(true, StatusID.LucidDreaming))
         {
             return;
         }
 
-        if (_lastMP < player.CurrentMp)
+        if (_lastMP < Player.Object.CurrentMp)
         {
             _lastMPUpdate = now;
         }
-        _lastMP = player.CurrentMp;
+        _lastMP = Player.Object.CurrentMp;
     }
 
     internal static unsafe bool CanDoAction()
@@ -279,12 +277,15 @@ internal static class ActionUpdater
             return false;
         }
 
-        foreach (var status in Player.Object.StatusList)
-        {
-            if (status != null && status.LockActions())
-                return true;
-        }
-        return false;
+		foreach (var status in Player.Object.StatusList)
+		{
+			if (!DataCenter.IsPvP)
+			{
+				if (status != null && status.GameData.Value.LockActions == true && status.RemainingTime > 1 + DataCenter.DefaultGCDRemain)
+					return true;
+			}
+		}
+		return false;
     }
 
     private unsafe static bool IsPlayerOccupied()

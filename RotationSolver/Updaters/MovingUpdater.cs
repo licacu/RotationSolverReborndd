@@ -10,15 +10,20 @@ internal static class MovingUpdater
 {
     internal static unsafe void UpdateCanMove(bool doNextAction)
     {
-        // Special state.
-        if (Svc.Condition?[ConditionFlag.OccupiedInEvent] == true)
+		if (Player.Object == null)
+		{
+			return;
+		}
+
+		// Special state.
+		if (Svc.Condition?[ConditionFlag.OccupiedInEvent] == true)
         {
             Service.CanMove = true;
             return;
         }
 
-        // Casting the action in list.
-        if (Svc.Condition?[ConditionFlag.Casting] == true)
+		// Casting the action in list.
+		if (Svc.Condition?[ConditionFlag.Casting] == true)
         {
             Service.CanMove = ActionBasicInfo.ActionsNoNeedCasting.Contains(Player.Object?.CastActionId ?? 0);
             return;
@@ -31,7 +36,7 @@ internal static class MovingUpdater
 
         // Action
         ActionID action;
-        if (DateTime.Now - RSCommands._lastUsedTime < TimeSpan.FromMilliseconds(100))
+        if (DateTime.Now - RSCommands._lastUsedTime < TimeSpan.FromMilliseconds(100f))
         {
             action = (ActionID)RSCommands._lastActionID;
         }
@@ -51,9 +56,9 @@ internal static class MovingUpdater
                               || (cfgImpro && Service.GetAdjustedActionId(ActionID.ImprovisationPvE) == action);
 
         // Special statuses
-        bool specialStatus = (cfgFlame && Player.Object.HasStatus(true, StatusID.Flamethrower))
-                             || (cfgPassage && Player.Object.HasStatus(true, StatusID.PassageOfArms))
-                             || (cfgImpro && Player.Object.HasStatus(true, StatusID.Improvisation));
+        bool specialStatus = (cfgFlame && StatusHelper.PlayerHasStatus(true, StatusID.Flamethrower))
+                             || (cfgPassage && StatusHelper.PlayerHasStatus(true, StatusID.PassageOfArms))
+                             || (cfgImpro && StatusHelper.PlayerHasStatus(true, StatusID.Improvisation));
 
         Service.CanMove = !specialStatus && !specialActions;
     }

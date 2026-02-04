@@ -1,29 +1,17 @@
 ﻿namespace RotationSolver.RebornRotations.PVPRotations.Healer;
 
-[Rotation("Default PVP", CombatType.PvP, GameVersion = "7.35")]
+[Rotation("Default PVP", CombatType.PvP, GameVersion = "7.4")]
 [SourceCode(Path = "main/RebornRotations/PVPRotations/Healer/SCH_Default.PVP.cs")]
 
 public class SCH_DefaultPVP : ScholarRotation
 {
     #region Configurations
 
-    [RotationConfig(CombatType.PvP, Name = "Stop attacking while in Guard.")]
-    public bool RespectGuard { get; set; } = true;
     #endregion
 
     #region oGCDs
     protected override bool EmergencyAbility(IAction nextGCD, out IAction? action)
     {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.EmergencyAbility(nextGCD, out action);
-        }
-
-        if (PurifyPvP.CanUse(out action))
-        {
-            return true;
-        }
-
         if (ChainStratagemPvP.CanUse(out action) && Target.HasStatus(false, StatusID.Guard))
         {
             return true;
@@ -34,11 +22,6 @@ public class SCH_DefaultPVP : ScholarRotation
 
     protected override bool AttackAbility(IAction nextGCD, out IAction? action)
     {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.AttackAbility(nextGCD, out action);
-        }
-
         if (DiabrosisPvP.CanUse(out action))
         {
             return true;
@@ -54,11 +37,6 @@ public class SCH_DefaultPVP : ScholarRotation
 
     protected override bool DefenseAreaAbility(IAction nextGCD, out IAction? action)
     {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.DefenseAreaAbility(nextGCD, out action);
-        }
-
         if (ExpedientPvP.CanUse(out action, usedUp: true))
         {
             return true;
@@ -69,11 +47,6 @@ public class SCH_DefaultPVP : ScholarRotation
 
     protected override bool HealAreaAbility(IAction nextGCD, out IAction? action)
     {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.HealAreaAbility(nextGCD, out action);
-        }
-
         if (SummonSeraphPvP.CanUse(out action, usedUp: true))
         {
             return true;
@@ -86,11 +59,6 @@ public class SCH_DefaultPVP : ScholarRotation
     #region GCDs
     protected override bool DefenseSingleGCD(out IAction? action)
     {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.DefenseSingleGCD(out action);
-        }
-
         if (StoneskinIiPvP.CanUse(out action, usedUp: true))
         {
             return true;
@@ -101,11 +69,6 @@ public class SCH_DefaultPVP : ScholarRotation
 
     protected override bool HealSingleGCD(out IAction? action)
     {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.HealSingleGCD(out action);
-        }
-
         if (HaelanPvP.CanUse(out action))
         {
             return true;
@@ -121,12 +84,7 @@ public class SCH_DefaultPVP : ScholarRotation
 
     protected override bool GeneralGCD(out IAction? action)
     {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.GeneralGCD(out action);
-        }
-
-        if (BiolysisPvP.CanUse(out action) && Player.HasStatus(true, StatusID.Recitation_3094))
+        if (BiolysisPvP.CanUse(out action) && StatusHelper.PlayerHasStatus(true, StatusID.Recitation_3094))
         {
             return true;
         }

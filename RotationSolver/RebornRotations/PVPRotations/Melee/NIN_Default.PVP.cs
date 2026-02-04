@@ -1,15 +1,11 @@
 ﻿namespace RotationSolver.RebornRotations.PVPRotations.Melee;
 
-[Rotation("Default PVP", CombatType.PvP, GameVersion = "7.35")]
+[Rotation("Default PVP", CombatType.PvP, GameVersion = "7.4")]
 [SourceCode(Path = "main/RebornRotations/PVPRotations/Tank/NIN_Default.PvP.cs")]
 
 public sealed class NIN_DefaultPvP : NinjaRotation
 {
     #region Configurations
-
-    [RotationConfig(CombatType.PvP, Name = "Stop attacking while in Guard.")]
-    public bool RespectGuard { get; set; } = true;
-
     [Range(0, 1, ConfigUnitType.Percent)]
     [RotationConfig(CombatType.PvP, Name = "Player health threshold needed for Bloodbath use")]
     public float BloodBathPvPPercent { get; set; } = 0.75f;
@@ -22,22 +18,12 @@ public sealed class NIN_DefaultPvP : NinjaRotation
     #region oGCDs
     protected override bool EmergencyAbility(IAction nextGCD, out IAction? action)
     {
-        if (Player.HasStatus(true, StatusID.Hidden_1316))
+        if (StatusHelper.PlayerHasStatus(true, StatusID.Hidden_1316))
         {
             return base.EmergencyAbility(nextGCD, out action);
         }
 
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.EmergencyAbility(nextGCD, out action);
-        }
-
-        if (PurifyPvP.CanUse(out action))
-        {
-            return true;
-        }
-
-        if (BloodbathPvP.CanUse(out action) && Player.GetHealthRatio() < BloodBathPvPPercent)
+        if (BloodbathPvP.CanUse(out action) && Player?.GetHealthRatio() < BloodBathPvPPercent)
         {
             return true;
         }
@@ -57,27 +43,16 @@ public sealed class NIN_DefaultPvP : NinjaRotation
 
     protected override bool DefenseSingleAbility(IAction nextGCD, out IAction? action)
     {
-        if (Player.HasStatus(true, StatusID.Hidden_1316))
+        if (StatusHelper.PlayerHasStatus(true, StatusID.Hidden_1316))
         {
             return base.DefenseSingleAbility(nextGCD, out action);
         }
-
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.DefenseSingleAbility(nextGCD, out action);
-        }
-
         return base.DefenseSingleAbility(nextGCD, out action);
     }
 
     protected override bool AttackAbility(IAction nextGCD, out IAction? action)
     {
-        if (Player.HasStatus(true, StatusID.Hidden_1316))
-        {
-            return base.AttackAbility(nextGCD, out action);
-        }
-
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
+        if (StatusHelper.PlayerHasStatus(true, StatusID.Hidden_1316))
         {
             return base.AttackAbility(nextGCD, out action);
         }
@@ -87,12 +62,12 @@ public sealed class NIN_DefaultPvP : NinjaRotation
             return true;
         }
 
-        if (BunshinPvP.CanUse(out action) && !Player.HasStatus(true, StatusID.ThreeMudra) && HasHostilesInMaxRange)
+        if (BunshinPvP.CanUse(out action) && !StatusHelper.PlayerHasStatus(true, StatusID.ThreeMudra) && HasHostilesInMaxRange)
         {
             return true;
         }
 
-        if (ThreeMudraPvP.CanUse(out action, usedUp: true) && !Player.HasStatus(true, StatusID.ThreeMudra) && HasHostilesInMaxRange)
+        if (ThreeMudraPvP.CanUse(out action, usedUp: true) && !StatusHelper.PlayerHasStatus(true, StatusID.ThreeMudra) && HasHostilesInMaxRange)
         {
             return true;
         }
@@ -105,13 +80,9 @@ public sealed class NIN_DefaultPvP : NinjaRotation
     #region GCDs
     protected override bool GeneralGCD(out IAction? action)
     {
-        if (Player.HasStatus(true, StatusID.Hidden_1316))
+        if (HasHidden)
         {
             return AssassinatePvP.CanUse(out action);
-        }
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.GeneralGCD(out action);
         }
 
         if (ZeshoMeppoPvP.CanUse(out action))
@@ -119,7 +90,7 @@ public sealed class NIN_DefaultPvP : NinjaRotation
             return true;
         }
 
-        if (Player.GetHealthRatio() < .5)
+        if (Player?.GetHealthRatio() < .5)
         {
             if (MeisuiPvP.CanUse(out action))
             {
@@ -147,7 +118,7 @@ public sealed class NIN_DefaultPvP : NinjaRotation
             return true;
         }
 
-        if (Player.WillStatusEnd(1, true, StatusID.ThreeMudra) && HutonPvP.CanUse(out action))
+        if (StatusHelper.PlayerWillStatusEnd(1, true, StatusID.ThreeMudra) && HutonPvP.CanUse(out action))
         {
             return true;
         }

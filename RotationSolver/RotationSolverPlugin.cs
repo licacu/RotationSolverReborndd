@@ -4,7 +4,6 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using ECommons;
 using ECommons.DalamudServices;
-using ECommons.GameHelpers;
 using ECommons.ImGuiMethods;
 using ECommons.Logging;
 using Lumina.Excel.Sheets;
@@ -19,6 +18,7 @@ using RotationSolver.UI.HighlightTeachingMode.ElementSpecial;
 using RotationSolver.Updaters;
 using RotationSolver.ActionTimeline;
 using WelcomeWindow = RotationSolver.UI.WelcomeWindow;
+using Player = ECommons.GameHelpers.Player;
 
 namespace RotationSolver;
 
@@ -34,8 +34,9 @@ public sealed class RotationSolverPlugin : IDalamudPlugin, IDisposable
     private static WelcomeWindow? _changelogWindow;
     private static OverlayWindow? _overlayWindow;
     private static EasterEggWindow? _easterEggWindow;
+	private static FirstStartTutorialWindow? _firstStartTutorialWindow;
 
-    private static readonly List<IDisposable> _dis = [];
+	private static readonly List<IDisposable> _dis = [];
     public static string Name => "Rotation Solver Reborn";
     internal static readonly List<DrawingHighlightHotbarBase> _drawingElements = [];
 
@@ -92,22 +93,23 @@ public sealed class RotationSolverPlugin : IDalamudPlugin, IDisposable
         _changelogWindow = new();
         _overlayWindow = new();
         _easterEggWindow = new();
+		_firstStartTutorialWindow = new();
 
-        // Start cactbot bridge if enabled
-        //try
-        //{
-        //    if (Service.Config.EnableCactbotTimeline)
-        //    {
-        //        var cactbotBridge = new Helpers.CactbotTimelineBridge();
-        //        _dis.Add(cactbotBridge);
-        //    }
-        //}
-        //catch (Exception ex)
-        //{
-        //    PluginLog.Warning($"Failed to start CactbotTimelineBridge: {ex.Message}");
-        //}
+		// Start cactbot bridge if enabled
+		//try
+		//{
+		//    if (Service.Config.EnableCactbotTimeline)
+		//    {
+		//        var cactbotBridge = new Helpers.CactbotTimelineBridge();
+		//        _dis.Add(cactbotBridge);
+		//    }
+		//}
+		//catch (Exception ex)
+		//{
+		//    PluginLog.Warning($"Failed to start CactbotTimelineBridge: {ex.Message}");
+		//}
 
-        windowSystem = new WindowSystem(Name);
+		windowSystem = new WindowSystem(Name);
         windowSystem.AddWindow(_rotationConfigWindow);
         windowSystem.AddWindow(_controlWindow);
         windowSystem.AddWindow(_nextActionWindow);
@@ -116,9 +118,11 @@ public sealed class RotationSolverPlugin : IDalamudPlugin, IDisposable
         windowSystem.AddWindow(_changelogWindow);
         windowSystem.AddWindow(_overlayWindow);
         windowSystem.AddWindow(_easterEggWindow);
-        //Notify.Success("Overlay Window was added!");
+		windowSystem.AddWindow(_firstStartTutorialWindow);
 
-        Svc.PluginInterface.UiBuilder.OpenConfigUi += OnOpenConfigUi;
+		//Notify.Success("Overlay Window was added!");
+
+		Svc.PluginInterface.UiBuilder.OpenConfigUi += OnOpenConfigUi;
         Svc.PluginInterface.UiBuilder.OpenMainUi += OnOpenConfigUi;
         Svc.PluginInterface.UiBuilder.Draw += OnDraw;
 
@@ -178,12 +182,12 @@ public sealed class RotationSolverPlugin : IDalamudPlugin, IDisposable
 
         static void DutyState_DutyStarted(object? sender, ushort e)
         {
-            if (!Player.AvailableThreadSafe)
+            if (!Player.Available)
             {
                 return;
             }
 
-            if (!Player.Object.IsJobCategory(JobRole.Tank) && !Player.Object.IsJobCategory(JobRole.Healer))
+            if (!TargetFilter.PlayerJobCategory(JobRole.Tank) && !TargetFilter.PlayerJobCategory(JobRole.Healer))
             {
                 return;
             }
@@ -197,7 +201,7 @@ public sealed class RotationSolverPlugin : IDalamudPlugin, IDisposable
 
         static void DutyState_DutyWiped(object? sender, ushort e)
         {
-            if (!Player.AvailableThreadSafe)
+            if (!Player.Available)
             {
                 return;
             }
@@ -261,17 +265,36 @@ public sealed class RotationSolverPlugin : IDalamudPlugin, IDisposable
 
     internal static void OpenTicTacToe()
     {
-        if (_easterEggWindow != null)
-        {
-            _easterEggWindow.IsOpen = true;
-        }
+        _easterEggWindow?.IsOpen = true;
     }
 
-    internal static void UpdateDisplayWindow()
+	internal static void ShowConfigWindow(RotationConfigWindowTab? tab = null)
+	{
+		if (_rotationConfigWindow == null)
+		{
+			return;
+		}
+
+		_rotationConfigWindow.IsOpen = true;
+		if (tab.HasValue)
+		{
+			_rotationConfigWindow.SetActiveTab(tab.Value);
+		}
+	}
+
+	internal static void OpenFirstStartTutorial()
+	{
+		if (_firstStartTutorialWindow?.IsOpen == true)
+		{
+			return;
+		}
+
+		_firstStartTutorialWindow?.Toggle();
+	}
+
+	internal static void UpdateDisplayWindow()
     {
         bool isValid = MajorUpdater.IsValid && DataCenter.CurrentRotation != null;
-
-        _nextActionWindow!.IsOpen = isValid && Service.Config.ShowNextActionWindow;
 
         isValid &= !Service.Config.OnlyShowWithHostileOrInDuty
                 || Svc.Condition[ConditionFlag.BoundByDuty]
@@ -279,9 +302,10 @@ public sealed class RotationSolverPlugin : IDalamudPlugin, IDisposable
 
         _controlWindow!.IsOpen = isValid && Service.Config.ShowControlWindow;
         _cooldownWindow!.IsOpen = isValid && Service.Config.ShowCooldownWindow;
+		_nextActionWindow!.IsOpen = isValid && Service.Config.ShowNextActionWindow;
 
-        // ActionTimeline window with additional checks
-        bool showActionTimeline = isValid && Service.Config.ShowActionTimelineWindow;
+		// ActionTimeline window with additional checks
+		bool showActionTimeline = isValid && Service.Config.ShowActionTimelineWindow;
 
         if (Service.Config.ActionTimelineOnlyWhenActive)
         {

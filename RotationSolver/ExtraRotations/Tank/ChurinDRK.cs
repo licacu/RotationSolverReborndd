@@ -3,17 +3,17 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 
 namespace RotationSolver.ExtraRotations.Tank;
 
-[Rotation("ChurinDRK", CombatType.PvE, GameVersion = "7.35", Description = "Find it in your heart. You'll need to break past the ribs and then scoop it out, but it's in there, and you need to find it. Quickly.")]
+[Rotation("ChurinDRK", CombatType.PvE, GameVersion = "7.4", Description = "Find it in your heart. You'll need to break past the ribs and then scoop it out, but it's in there, and you need to find it. Quickly.")]
 [SourceCode(Path = "main/ExtraRotations/Tank/ChurinDRK.cs")]
 [ExtraRotation]
 public sealed class ChurinDRK : DarkKnightRotation
 {
     #region Properties
-    private static bool HasDisesteem => Player.HasStatus(true, StatusID.Scorn);
+    private static bool HasDisesteem => StatusHelper.PlayerHasStatus(true, StatusID.Scorn);
     private bool CanBurst => MergedStatus.HasFlag(AutoStatus.Burst) && LivingShadowPvE.IsEnabled;
     private bool InBurstWindow => LivingShadowPvE.EnoughLevel && ShadowTime is > 2.5f and <= 20f || !LivingShadowPvE.EnoughLevel || HasBuffs;
     private static bool InOddWindow(IBaseAction action) => action.Cooldown.IsCoolingDown && action.Cooldown.ElapsedAfter(30f) && !action.Cooldown.ElapsedAfter(90f);
-    private static bool IsMedicated => Player.HasStatus(true, StatusID.Medicated) && !Player.WillStatusEnd(0, true, StatusID.Medicated);
+    private static bool IsMedicated => StatusHelper.PlayerHasStatus(true, StatusID.Medicated) && !StatusHelper.PlayerWillStatusEnd(0, true, StatusID.Medicated);
     private static bool NoCombo => !IsLastGCD(ActionID.HardSlashPvE, ActionID.SyphonStrikePvE);
 
     #region Enums
@@ -392,7 +392,7 @@ public sealed class ChurinDRK : DarkKnightRotation
         if (!SaltedEarthPvE.EnoughLevel || !SaltedEarthPvE.IsEnabled)
             return false;
 
-        bool hasSaltedEarth = Player.HasStatus(true, StatusID.SaltedEarth);
+        bool hasSaltedEarth = StatusHelper.PlayerHasStatus(true, StatusID.SaltedEarth);
         bool canUseSaltAndDarkness = SaltAndDarknessPvE.EnoughLevel && hasSaltedEarth;
 
         if (InBurstWindow && canUseSaltAndDarkness && CurrentMp < 6000) return SaltAndDarknessPvE.CanUse(out act);
@@ -634,31 +634,37 @@ public sealed class ChurinDRK : DarkKnightRotation
 
     private List<IBattleChara> _currentParty = [];
 
-    public List<IBattleChara> CurrentParty
-    {
-        get => _currentParty;
-        set
-        {
-            _currentParty = value;
-            var newParty = PartyMembers ?? [Player];
-            IEnumerable<IBattleChara> battleCharas = [.. newParty];
-            var hasChanged = !_currentParty.ToHashSet().SetEquals(battleCharas);
+	public List<IBattleChara> CurrentParty
+	{
+		get => _currentParty;
+		set
+		{
+			_currentParty = value;
+			var newParty = PartyMembers ?? [Player!];
+			IEnumerable<IBattleChara> battleCharas = [.. newParty];
+			var hasChanged = !_currentParty.ToHashSet().SetEquals(battleCharas);
 
-            if (hasChanged)
-            {
-                _currentParty.Clear();
-                _currentParty.AddRange(battleCharas);
-            }
+			if (hasChanged)
+			{
+				_currentParty.Clear();
+				foreach (var member in battleCharas)
+				{
+					if (member != null)
+					{
+						_currentParty.Add(member);
+					}
+				}
+			}
 
-            if (_currentParty.Count == 0)
-            {
-                _currentParty.Add(Player);
-            }
-        }
-    }
+			if (_currentParty.Count == 0 && Player != null)
+			{
+				_currentParty.Add(Player);
+			}
+		}
+	}
 
 
-    #endregion
-    
-    #endregion
-    }
+	#endregion
+
+	#endregion
+}

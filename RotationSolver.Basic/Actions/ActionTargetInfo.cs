@@ -2,7 +2,6 @@
 using ECommons.DalamudServices;
 using ECommons.ExcelServices;
 using ECommons.GameFunctions;
-using ECommons.GameHelpers;
 using ECommons.Logging;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
@@ -12,6 +11,7 @@ using RotationSolver.Basic.Rotations.Duties;
 using static RotationSolver.Basic.Configuration.ConfigTypes;
 using AttackType = RotationSolver.Basic.Data.AttackType;
 using CombatRole = RotationSolver.Basic.Data.CombatRole;
+using Player = ECommons.GameHelpers.Player;
 
 namespace RotationSolver.Basic.Actions;
 
@@ -45,25 +45,36 @@ public struct ActionTargetInfo(IBaseAction action)
     /// </summary>
     public readonly bool IsTargetFriendly => action.Setting.IsFriendly;
 
-    #region Targetting Behaviour
+	#region Targetting Behaviour
 
-    /// <summary>
-    /// Retrieves a collection of valid battle characters that can be targeted based on the specified criteria.
-    /// </summary>
-    /// <param name="skipStatusProvideCheck">If set to <c>true</c>, skips the status provide check.</param>
-    /// <param name="skipTargetStatusNeedCheck">If set to <c>true</c>, skips the target status need check.</param>
-    /// <param name="type">The type of target to filter (e.g., Heal).</param>
-    /// <returns>
-    /// A <see cref="List{IBattleChara}"/> containing the valid targets.
-    /// </returns>
-    private readonly List<IBattleChara> GetCanTargets(bool skipStatusProvideCheck, bool skipTargetStatusNeedCheck, TargetType type)
+	/// <summary>
+	/// Retrieves a collection of valid battle characters that can be targeted based on the specified criteria.
+	/// </summary>
+	/// <param name="skipStatusProvideCheck">If set to <c>true</c>, skips the status provide check.</param>
+	/// <param name="skipTargetStatusNeedCheck">If set to <c>true</c>, skips the target status need check.</param>
+	/// <param name="type">The type of target to filter (e.g., Heal).</param>
+	/// <param name="targetOverride">Overrides the default target type for the action.</param>
+	/// <returns>
+	/// A <see cref="List{IBattleChara}"/> containing the valid targets.
+	/// </returns>
+	private readonly List<IBattleChara> GetCanTargets(bool skipStatusProvideCheck, bool skipTargetStatusNeedCheck, TargetType type, TargetType targetOverride)
     {
         if (DataCenter.AllTargets == null)
         {
             return [];
         }
 
-        List<IBattleChara> validTargets = [];
+		if (Player.Object == null)
+		{
+			return [];
+		}
+
+		if (targetOverride == TargetType.Self)
+		{
+			return [Player.Object];
+		}
+
+		List<IBattleChara> validTargets = [];
         foreach (IBattleChara target in TargetHelper.GetTargetsByRange(Range))
         {
             if (type == TargetType.Heal && target.GetHealthRatio() == 1)
@@ -114,30 +125,41 @@ public struct ActionTargetInfo(IBaseAction action)
         return validTargets;
     }
 
-    /// <summary>
-    /// Retrieves a list of battle characters that can be affected based on the specified criteria.
-    /// </summary>
-    /// <param name="skipStatusProvideCheck">If set to <c>true</c>, skips the status provide check.</param>
-    /// <param name="skipTargetStatusNeedCheck">If set to <c>true</c>, skips the target status need check.</param>
-    /// <param name="type">The type of target to filter (e.g., Heal).</param>
-    /// <returns>
-    /// A <see cref="List{IBattleChara}"/> containing the valid targets.
-    /// </returns>
-    private readonly List<IBattleChara> GetCanAffects(bool skipStatusProvideCheck, bool skipTargetStatusNeedCheck, TargetType type)
+	/// <summary>
+	/// Retrieves a list of battle characters that can be affected based on the specified criteria.
+	/// </summary>
+	/// <param name="skipStatusProvideCheck">If set to <c>true</c>, skips the status provide check.</param>
+	/// <param name="skipTargetStatusNeedCheck">If set to <c>true</c>, skips the target status need check.</param>
+	/// <param name="type">The type of target to filter (e.g., Heal).</param>
+	/// <param name="targetOverride">Overrides the default target type for the action.</param>
+	/// <returns>
+	/// A <see cref="List{IBattleChara}"/> containing the valid targets.
+	/// </returns>
+	private readonly List<IBattleChara> GetCanAffects(bool skipStatusProvideCheck, bool skipTargetStatusNeedCheck, TargetType type, TargetType targetOverride)
     {
         if (EffectRange == 0)
         {
             return [];
         }
 
-        if ((action.Setting.IsFriendly
+		if (Player.Object == null)
+		{
+			return [];
+		}
+
+		if ((action.Setting.IsFriendly
             ? DataCenter.PartyMembers
             : DataCenter.AllHostileTargets) == null)
         {
             return [];
         }
 
-        IEnumerable<IBattleChara> items = TargetHelper.GetTargetsByRange(Range + EffectRange, action.Setting.IsFriendly);
+		if (targetOverride == TargetType.Self)
+		{
+			return [Player.Object];
+		}
+
+		IEnumerable<IBattleChara> items = TargetHelper.GetTargetsByRange(Range + EffectRange, action.Setting.IsFriendly);
 
         List<IBattleChara> validTargets = [];
         foreach (IBattleChara tar in items)
@@ -220,7 +242,12 @@ public struct ActionTargetInfo(IBaseAction action)
             return false;
         }
 
-        if (!Player.AvailableThreadSafe)
+		if (Player.Object == null)
+		{
+			return false;
+		}
+
+		if (!Player.Available)
         {
             return false;
         }
@@ -379,35 +406,41 @@ public struct ActionTargetInfo(IBaseAction action)
         return float.IsNaN(time) || time >= action.Config.TimeToKill;
     }
 
-    #endregion
+	#endregion
 
-    #region Target Result
+	#region Target Result
 
-    /// <summary>
-    /// Finds the target based on the specified criteria.
-    /// </summary>
-    /// <param name="skipAoeCheck">If set to <c>true</c>, skips the AoE check.</param>
-    /// <param name="skipStatusProvideCheck">If set to <c>true</c>, skips the status provide check.</param>
-    /// <param name="skipTargetStatusNeedCheck">If set to <c>true</c>, skips the target status need check.</param>
-    /// <returns>
-    /// A <see cref="TargetResult"/> containing the target and affected characters, or <c>null</c> if no target is found.
-    /// </returns>
-    internal readonly TargetResult? FindTarget(bool skipAoeCheck, bool skipStatusProvideCheck, bool skipTargetStatusNeedCheck)
+	/// <summary>
+	/// Finds the target based on the specified criteria.
+	/// </summary>
+	/// <param name="skipAoeCheck">If set to <c>true</c>, skips the AoE check.</param>
+	/// <param name="skipStatusProvideCheck">If set to <c>true</c>, skips the status provide check.</param>
+	/// <param name="skipTargetStatusNeedCheck">If set to <c>true</c>, skips the target status need check.</param>
+	/// <param name="targetOverride">Overrides the default target type for the action.</param>
+	/// <returns>
+	/// A <see cref="TargetResult"/> containing the target and affected characters, or <c>null</c> if no target is found.
+	/// </returns>
+	internal readonly TargetResult? FindTarget(bool skipAoeCheck, bool skipStatusProvideCheck, bool skipTargetStatusNeedCheck, TargetType targetOverride)
     {
         if (action == null || action.Setting == null || action.Config == null)
         {
             return null;
         }
 
-        if (Range == 0 && EffectRange == 0)
+		if (Player.Object == null)
+		{
+			return null;
+		}
+
+		if (Range == 0 && EffectRange == 0)
         {
             return new TargetResult(Player.Object, [], Player.Object.Position);
         }
 
         TargetType type = action.Setting.TargetType;
 
-        IEnumerable<IBattleChara> canTargets = GetCanTargets(skipStatusProvideCheck, skipTargetStatusNeedCheck, type);
-        List<IBattleChara> canAffects = GetCanAffects(skipStatusProvideCheck, skipTargetStatusNeedCheck, type);
+        IEnumerable<IBattleChara> canTargets = GetCanTargets(skipStatusProvideCheck, skipTargetStatusNeedCheck, type, targetOverride);
+        List<IBattleChara> canAffects = GetCanAffects(skipStatusProvideCheck, skipTargetStatusNeedCheck, type, targetOverride);
 
         if (canTargets == null || canAffects == null)
         {
@@ -422,14 +455,14 @@ public struct ActionTargetInfo(IBaseAction action)
 
         if (IsTargetArea)
         {
-            return FindTargetArea(canTargets, canAffects, Range, Player.Object);
+            return FindTargetArea(canTargets, canAffects, Range, Player.Object, targetOverride);
         }
 
         List<IBattleChara> targetsList = [.. GetMostCanTargetObjects(canTargets, canAffects, skipAoeCheck ? 0 : action.Config.AoeCount)];
 
         IBattleChara? target = targetsList.Count > 0
-            ? FindTargetByType(targetsList, type, action.Config.AutoHealRatio, action.Setting.SpecialType)
-            : FindTargetByType([], type, action.Config.AutoHealRatio, action.Setting.SpecialType);
+            ? FindTargetByType(targetsList, type, action.Config.AutoHealRatio, action.Setting.SpecialType, targetOverride, action.Setting.IsFriendly)
+            : FindTargetByType([], type, action.Config.AutoHealRatio, action.Setting.SpecialType, targetOverride, action.Setting.IsFriendly);
 
         IBattleChara[] affectedTargets;
         if (target != null)
@@ -450,18 +483,19 @@ public struct ActionTargetInfo(IBaseAction action)
         return target == null ? null : new TargetResult(target, affectedTargets, target.Position);
     }
 
-    /// <summary>
-    /// Finds the target area based on the specified criteria.
-    /// </summary>
-    /// <param name="canTargets">The potential targets that can be affected.</param>
-    /// <param name="canAffects">The potential characters that can be affected.</param>
-    /// <param name="range">The range within which to find the target area.</param>
-    /// <param name="player">The player character.</param>
-    /// <returns>
-    /// A <see cref="TargetResult"/> containing the target area and affected characters, or <c>null</c> if no target area is found.
-    /// </returns>
-    private readonly TargetResult? FindTargetArea(IEnumerable<IBattleChara> canTargets, IEnumerable<IBattleChara> canAffects,
-    float range, IPlayerCharacter player)
+	/// <summary>
+	/// Finds the target area based on the specified criteria.
+	/// </summary>
+	/// <param name="canTargets">The potential targets that can be affected.</param>
+	/// <param name="canAffects">The potential characters that can be affected.</param>
+	/// <param name="range">The range within which to find the target area.</param>
+	/// <param name="player">The player character.</param>
+	/// <param name="targetOverride">Overrides the default target type for the action.</param>
+	/// <returns>
+	/// A <see cref="TargetResult"/> containing the target area and affected characters, or <c>null</c> if no target area is found.
+	/// </returns>
+	private readonly TargetResult? FindTargetArea(IEnumerable<IBattleChara> canTargets, IEnumerable<IBattleChara> canAffects,
+    float range, IPlayerCharacter player, TargetType targetOverride)
     {
         if (player == null || canTargets == null || canAffects == null)
         {
@@ -470,7 +504,7 @@ public struct ActionTargetInfo(IBaseAction action)
 
         if (action.Setting.TargetType == TargetType.Move)
         {
-            return FindTargetAreaMove(range);
+            return FindTargetAreaMove(range, targetOverride);
         }
         else
         {
@@ -488,7 +522,7 @@ public struct ActionTargetInfo(IBaseAction action)
                     }
                     else
                     {
-                        return FindTargetAreaFriend(range, canAffects, player);
+                        return FindTargetAreaFriend(range, canAffects, player, targetOverride);
                     }
                 }
             }
@@ -550,18 +584,24 @@ public struct ActionTargetInfo(IBaseAction action)
         return new TargetResult(target, affectedTargetsArray, target.Position);
     }
 
-    /// <summary>
-    /// Finds the target area for movement based on the specified range.
-    /// </summary>
-    /// <param name="range">The range within which to find the target area.</param>
-    /// <returns>
-    /// A <see cref="TargetResult"/> containing the target area and affected characters, or <c>null</c> if no target area is found.
-    /// </returns>
-    private readonly TargetResult? FindTargetAreaMove(float range)
+	/// <summary>
+	/// Finds the target area for movement based on the specified range.
+	/// </summary>
+	/// <param name="range">The range within which to find the target area.</param>
+	/// <param name="targetOverride">Overrides the default target type for the action.</param>
+	/// <returns>
+	/// A <see cref="TargetResult"/> containing the target area and affected characters, or <c>null</c> if no target area is found.
+	/// </returns>
+	private readonly TargetResult? FindTargetAreaMove(float range, TargetType targetOverride)
     {
-        if (Service.Config.MoveAreaActionFarthest)
+		if (Player.Object == null)
+		{
+			return null;
+		}
+
+		if (Service.Config.MoveAreaActionFarthest)
         {
-            Vector3 pPosition = Player.Object.Position;
+			Vector3 pPosition = Player.Object.Position;
             if (Service.Config.MoveTowardsScreenCenter)
             {
                 unsafe
@@ -603,21 +643,22 @@ public struct ActionTargetInfo(IBaseAction action)
             }
 
             IEnumerable<IBattleChara> targetList = TargetFilter.GetObjectInRadius(availableCharas, range);
-            IBattleChara? target = FindTargetByType(targetList, TargetType.Move, action.Config.AutoHealRatio, action.Setting.SpecialType);
+            IBattleChara? target = FindTargetByType(targetList, TargetType.Move, action.Config.AutoHealRatio, action.Setting.SpecialType, targetOverride, true);
             return target == null ? null : new TargetResult(target, Array.Empty<IBattleChara>(), target.Position);
         }
     }
 
-    /// <summary>
-    /// Finds the target area for friendly actions based on the specified range and strategy.
-    /// </summary>
-    /// <param name="range">The range within which to find the target area.</param>
-    /// <param name="canAffects">The potential characters that can be affected.</param>
-    /// <param name="player">The player character.</param>
-    /// <returns>
-    /// A <see cref="TargetResult"/> containing the target area and affected characters, or <c>null</c> if no target area is found.
-    /// </returns>
-    private readonly TargetResult? FindTargetAreaFriend(float range, IEnumerable<IBattleChara> canAffects, IPlayerCharacter player)
+	/// <summary>
+	/// Finds the target area for friendly actions based on the specified range and strategy.
+	/// </summary>
+	/// <param name="range">The range within which to find the target area.</param>
+	/// <param name="canAffects">The potential characters that can be affected.</param>
+	/// <param name="player">The player character.</param>
+	/// <param name="targetOverride">Overrides the default target type for the action.</param>
+	/// <returns>
+	/// A <see cref="TargetResult"/> containing the target area and affected characters, or <c>null</c> if no target area is found.
+	/// </returns>
+	private readonly TargetResult? FindTargetAreaFriend(float range, IEnumerable<IBattleChara> canAffects, IPlayerCharacter player, TargetType targetOverride)
     {
         if (canAffects == null)
         {
@@ -630,8 +671,33 @@ public struct ActionTargetInfo(IBaseAction action)
             return new TargetResult(player, [.. GetAffectsVector(player.Position, canAffects)], player.Position);
         }
 
-        // --- Try OnLocations logic first ---
-        _ = OtherConfiguration.BeneficialPositions.TryGetValue(Svc.ClientState.TerritoryType, out Vector3[]? pts);
+		if (Service.Config.UseTargetTankForGroundHeal && DataCenter.PartyMembers != null)
+		{
+			IBattleChara? tankWithStance = null;
+			IBattleChara? tankWithoutStance = null;
+			foreach (var member in DataCenter.PartyMembers)
+			{
+				if (member == null || member.GameObjectId == player.GameObjectId) continue;
+				if (member.IsJobCategory(JobRole.Tank))
+				{
+					if (member.HasStatus(false, StatusHelper.TankStanceStatus))
+					{
+						tankWithStance = member;
+						break; // Prefer tank with stance
+					}
+					else tankWithoutStance ??= member;
+				}
+			}
+			IBattleChara? tankTarget = tankWithStance ?? tankWithoutStance;
+			if (tankTarget != null)
+			{
+				List<IBattleChara> affectsList = [.. GetAffectsVector(tankTarget.Position, canAffects)];
+				return new TargetResult(tankTarget, [.. affectsList], tankTarget.Position);
+			}
+		}
+
+		// --- Try OnLocations logic first ---
+		_ = OtherConfiguration.BeneficialPositions.TryGetValue(Svc.ClientState.TerritoryType, out Vector3[]? pts);
         pts ??= [];
 
         // Use fallback points if no beneficial positions are found
@@ -746,7 +812,7 @@ public struct ActionTargetInfo(IBaseAction action)
                 }
             }
             IBattleChara? attackT = FindTargetByType(partyMembersInRadius,
-                TargetType.BeAttacked, action.Config.AutoHealRatio, action.Setting.SpecialType);
+                TargetType.BeAttacked, action.Config.AutoHealRatio, action.Setting.SpecialType, targetOverride, true);
 
             if (attackT == null)
             {
@@ -877,7 +943,7 @@ public struct ActionTargetInfo(IBaseAction action)
         }
 
         // Cleave mode
-        if (aoeCount > 1 && Service.Config.AoEType == AoEType.Cleave)
+        if (aoeCount > 1 && (Service.Config.AoEType == AoEType.Cleave || (DataCenter.IsInM9S && Service.Config.M9SCleaveOnly)))
         {
             yield break;
         }
@@ -978,7 +1044,10 @@ public struct ActionTargetInfo(IBaseAction action)
                     return (tdirLen - subTarget.HitboxRadius) <= EffectRange;
 
                 default:
-                    PluginLog.Debug($"{action.Action.Name.ExtractText()}'s CastType is not valid! The value is {action.Action.CastType}");
+					if (Service.Config.InDebug)
+					{
+						PluginLog.Debug($"{action.Action.Name.ExtractText()}'s CastType is not valid! The value is {action.Action.CastType}");
+					}
                     return false;
             }
         }
@@ -1036,171 +1105,186 @@ public struct ActionTargetInfo(IBaseAction action)
                 }
 
             default:
-                PluginLog.Debug($"{action.Action.Name.ExtractText()}'s CastType is not valid! The value is {action.Action.CastType}");
+				if (Service.Config.InDebug)
+				{
+					PluginLog.Debug($"{action.Action.Name.ExtractText()}'s CastType is not valid! The value is {action.Action.CastType}");
+				}
                 return false;
         }
     }
 
-    ///// <summary>
-    ///// Counts how many units would be hit if this action were used on the current hard target.
-    ///// - When applyFilters is true, respects status/TTK/resistance filtering (same as GetCanAffects).
-    ///// - When applyFilters is false, uses the general AoE counting logic.
-    ///// </summary>
-    //public readonly int CountAffectedAtCurrentTarget(IBaseAction action, bool applyFilters = true)
-    //{
-    //    var player = Player.Object;
-    //    if (player == null) return 0;
+	///// <summary>
+	///// Counts how many units would be hit if this action were used on the current hard target.
+	///// - When applyFilters is true, respects status/TTK/resistance filtering (same as GetCanAffects).
+	///// - When applyFilters is false, uses the general AoE counting logic.
+	///// </summary>
+	//public readonly int CountAffectedAtCurrentTarget(IBaseAction action, bool applyFilters = true)
+	//{
+	//    var player = Player.Object;
+	//    if (player == null) return 0;
 
-    //    IBattleChara? currentTarget = action.Target.Target;
+	//    IBattleChara? currentTarget = action.Target.Target;
 
-    //    // Single target or no AoE radius -> 1 (anchor)
-    //    if (IsSingleTarget || EffectRange <= 0)
-    //        return currentTarget != null ? 1 : 1;
+	//    // Single target or no AoE radius -> 1 (anchor)
+	//    if (IsSingleTarget || EffectRange <= 0)
+	//        return currentTarget != null ? 1 : 1;
 
-    //    // If this action has a non-zero cast range and we do have a target, enforce range gate.
-    //    if (Range > 0 && currentTarget != null)
-    //    {
-    //        float dist = Vector3.Distance(player.Position, currentTarget.Position) - currentTarget.HitboxRadius;
-    //        if (dist > Range) return 0;
-    //    }
+	//    // If this action has a non-zero cast range and we do have a target, enforce range gate.
+	//    if (Range > 0 && currentTarget != null)
+	//    {
+	//        float dist = Vector3.Distance(player.Position, currentTarget.Position) - currentTarget.HitboxRadius;
+	//        if (dist > Range) return 0;
+	//    }
 
-    //    // Fast path: unfiltered geometry-based count using AoE logic (friendly/hostile + self-centered AoE).
-    //    if (!applyFilters)
-    //        return AoeCount(currentTarget, action);
+	//    // Fast path: unfiltered geometry-based count using AoE logic (friendly/hostile + self-centered AoE).
+	//    if (!applyFilters)
+	//        return AoeCount(currentTarget, action);
 
-    //    // Filtered path: build candidates the same way the action would (statuses, ttk, resistances),
-    //    // then count using the same AoE geometry with an anchored center (current target or player for self-AoE).
-    //    IBattleChara anchor = (currentTarget ?? player);
+	//    // Filtered path: build candidates the same way the action would (statuses, ttk, resistances),
+	//    // then count using the same AoE geometry with an anchored center (current target or player for self-AoE).
+	//    IBattleChara anchor = (currentTarget ?? player);
 
-    //    // Build candidate set consistent with GetCanAffects and IsFriendly (heal ratio/status/ttk/resist).
-    //    IEnumerable<IBattleChara> candidates = GetCanAffects(skipStatusProvideCheck: false, skipTargetStatusNeedCheck: false, action.Setting.TargetType);
+	//    // Build candidate set consistent with GetCanAffects and IsFriendly (heal ratio/status/ttk/resist).
+	//    IEnumerable<IBattleChara> candidates = GetCanAffects(skipStatusProvideCheck: false, skipTargetStatusNeedCheck: false, action.Setting.TargetType);
 
-    //    // For cast-range actions, if we have a target center ensure it is still in range.
-    //    if (Range > 0 && currentTarget != null)
-    //    {
-    //        float dist = Vector3.Distance(player.Position, currentTarget.Position) - currentTarget.HitboxRadius;
-    //        if (dist > Range) return 0;
-    //    }
+	//    // For cast-range actions, if we have a target center ensure it is still in range.
+	//    if (Range > 0 && currentTarget != null)
+	//    {
+	//        float dist = Vector3.Distance(player.Position, currentTarget.Position) - currentTarget.HitboxRadius;
+	//        if (dist > Range) return 0;
+	//    }
 
-    //    int count = 0;
-    //    foreach (var t in candidates)
-    //    {
-    //        if (t == null) continue;
-    //        if (t.GameObjectId == anchor.GameObjectId || GetCanTarget(anchor, t))
-    //            count++;
-    //    }
-    //    return count;
-    //}
+	//    int count = 0;
+	//    foreach (var t in candidates)
+	//    {
+	//        if (t == null) continue;
+	//        if (t.GameObjectId == anchor.GameObjectId || GetCanTarget(anchor, t))
+	//            count++;
+	//    }
+	//    return count;
+	//}
 
-    ///// <summary>
-    ///// Counts AoE hits for this action. For self-centered AoE (cast range == 0), anchors at player.
-    ///// If a target is provided, always anchor at that target; otherwise, finds the best cluster.
-    ///// </summary>
-    //public static int AoeCount(IBattleChara? target, IBaseAction action)
-    //{
-    //    // Defensive checks
-    //    if (action == null || Player.Object == null)
-    //        return 0;
+	///// <summary>
+	///// Counts AoE hits for this action. For self-centered AoE (cast range == 0), anchors at player.
+	///// If a target is provided, always anchor at that target; otherwise, finds the best cluster.
+	///// </summary>
+	//public static int AoeCount(IBattleChara? target, IBaseAction action)
+	//{
+	//    // Defensive checks
+	//    if (action == null || Player.Object == null)
+	//        return 0;
 
-    //    // Pull action geometry via ActionTargetInfo to respect overrides (e.g. Liturgy)
-    //    var ti = new ActionTargetInfo(action);
-    //    float castRange = MathF.Max(0, ti.Range);
-    //    float effectRange = MathF.Max(0, ti.EffectRange);
-    //    bool isFriendly = ti.IsTargetFriendly;
+	//    // Pull action geometry via ActionTargetInfo to respect overrides (e.g. Liturgy)
+	//    var ti = new ActionTargetInfo(action);
+	//    float castRange = MathF.Max(0, ti.Range);
+	//    float effectRange = MathF.Max(0, ti.EffectRange);
+	//    bool isFriendly = ti.IsTargetFriendly;
 
-    //    // No AoE radius -> nothing to count
-    //    if (effectRange <= 0)
-    //        return 0;
+	//    // No AoE radius -> nothing to count
+	//    if (effectRange <= 0)
+	//        return 0;
 
-    //    // Candidate set: friendly actions -> party; hostile actions -> hostiles
-    //    List<IBattleChara>? group = isFriendly ? DataCenter.PartyMembers : DataCenter.AllHostileTargets;
-    //    if (group == null || group.Count == 0)
-    //        return 0;
+	//    // Candidate set: friendly actions -> party; hostile actions -> hostiles
+	//    List<IBattleChara>? group = isFriendly ? DataCenter.PartyMembers : DataCenter.AllHostileTargets;
+	//    if (group == null || group.Count == 0)
+	//        return 0;
 
-    //    // Helper to count hits around a center position
-    //    static int CountAround(Vector3 center, IEnumerable<IBattleChara> objs, float radius)
-    //    {
-    //        int count = 0;
-    //        foreach (var o in objs)
-    //        {
-    //            if (o == null) continue;
-    //            // Standard circle hit test: distance minus target hitbox within radius
-    //            if (Vector3.Distance(center, o.Position) - o.HitboxRadius <= radius)
-    //                count++;
-    //        }
-    //        return count;
-    //    }
+	//    // Helper to count hits around a center position
+	//    static int CountAround(Vector3 center, IEnumerable<IBattleChara> objs, float radius)
+	//    {
+	//        int count = 0;
+	//        foreach (var o in objs)
+	//        {
+	//            if (o == null) continue;
+	//            // Standard circle hit test: distance minus target hitbox within radius
+	//            if (Vector3.Distance(center, o.Position) - o.HitboxRadius <= radius)
+	//                count++;
+	//        }
+	//        return count;
+	//    }
 
-    //    // Always anchor when a target is provided, or when the action is self-centered (castRange == 0).
-    //    if (target != null || castRange == 0)
-    //    {
-    //        Vector3 centerPos;
-    //        if (castRange == 0 || target == null)
-    //        {
-    //            centerPos = Player.Object.Position;
-    //        }
-    //        else
-    //        {
-    //            centerPos = target.Position;
+	//    // Always anchor when a target is provided, or when the action is self-centered (castRange == 0).
+	//    if (target != null || castRange == 0)
+	//    {
+	//        Vector3 centerPos;
+	//        if (castRange == 0 || target == null)
+	//        {
+	//            centerPos = Player.Object.Position;
+	//        }
+	//        else
+	//        {
+	//            centerPos = target.Position;
 
-    //            // If we do have a cast range, ensure the chosen center is within range
-    //            float toCenter = Vector3.Distance(Player.Object.Position, centerPos) - target.HitboxRadius;
-    //            if (toCenter > castRange)
-    //                return 0;
-    //        }
+	//            // If we do have a cast range, ensure the chosen center is within range
+	//            float toCenter = Vector3.Distance(Player.Object.Position, centerPos) - target.HitboxRadius;
+	//            if (toCenter > castRange)
+	//                return 0;
+	//        }
 
-    //        return CountAround(centerPos, group, effectRange);
-    //    }
+	//        return CountAround(centerPos, group, effectRange);
+	//    }
 
-    //    // No target provided and not self-centered: find the best cluster center within cast range when applicable
-    //    int maxAoeCount = 0;
+	//    // No target provided and not self-centered: find the best cluster center within cast range when applicable
+	//    int maxAoeCount = 0;
 
-    //    foreach (var centerTarget in group)
-    //    {
-    //        if (centerTarget == null) continue;
+	//    foreach (var centerTarget in group)
+	//    {
+	//        if (centerTarget == null) continue;
 
-    //        Vector3 centerPos = centerTarget.Position;
+	//        Vector3 centerPos = centerTarget.Position;
 
-    //        // Enforce cast range when applicable (range == 0 = self-centered, always OK)
-    //        if (castRange > 0)
-    //        {
-    //            float toCenter = Vector3.Distance(Player.Object.Position, centerPos) - centerTarget.HitboxRadius;
-    //            if (toCenter > castRange)
-    //                continue;
-    //        }
+	//        // Enforce cast range when applicable (range == 0 = self-centered, always OK)
+	//        if (castRange > 0)
+	//        {
+	//            float toCenter = Vector3.Distance(Player.Object.Position, centerPos) - centerTarget.HitboxRadius;
+	//            if (toCenter > castRange)
+	//                continue;
+	//        }
 
-    //        int current = CountAround(centerPos, group, effectRange);
-    //        if (current > maxAoeCount)
-    //            maxAoeCount = current;
-    //    }
+	//        int current = CountAround(centerPos, group, effectRange);
+	//        if (current > maxAoeCount)
+	//            maxAoeCount = current;
+	//    }
 
-    //    return maxAoeCount;
-    //}
-    #endregion
+	//    return maxAoeCount;
+	//}
+	#endregion
 
-    #region TargetFind
+	#region TargetFind
 
-    /// <summary>
-    /// Finds the target based on the specified type and criteria.
-    /// </summary>IBattleChara battleChara
-    /// <param name="battleChara"></param>
-    /// <param name="type"></param>
-    /// <param name="healRatio"></param>
-    /// <param name="actionType"></param>
-    /// <returns></returns>
-    public static IBattleChara? FindTargetByType(IEnumerable<IBattleChara> battleChara, TargetType type, float healRatio, SpecialActionType actionType)
+	/// <summary>
+	/// Finds the target based on the specified type and criteria.
+	/// </summary>IBattleChara battleChara
+	/// <param name="battleChara"></param>
+	/// <param name="type"></param>
+	/// <param name="healRatio"></param>
+	/// <param name="actionType"></param>
+	/// <param name="targetOverride">Overrides the default target type for the action.</param>
+    /// <param name="isFriendly">Indicates whether the target is friendly.</param>
+	/// <returns></returns>
+	public static IBattleChara? FindTargetByType(IEnumerable<IBattleChara> battleChara, TargetType type, float healRatio, SpecialActionType actionType, TargetType targetOverride, bool isFriendly)
     {
         if (battleChara == null)
         {
             return null;
         }
 
-        if (type == TargetType.Self)
+		if (Player.Object == null)
+		{
+			return null;
+		}
+
+		if (type == TargetType.Self)
         {
             return Player.Object;
         }
 
-        switch (actionType)
+		if (targetOverride == TargetType.Self)
+		{
+			return Player.Object;
+		}
+
+		switch (actionType)
         {
             case SpecialActionType.MeleeRange:
                 {
@@ -1287,82 +1371,550 @@ public struct ActionTargetInfo(IBaseAction action)
                 break;
         }
 
-        switch (type) // Filter the objects.
-        {
-            case TargetType.Death:
-                {
-                    if (DataCenter.DeathTarget != null)
-                    {
-                        return DataCenter.DeathTarget;
-                    }
-                }
-                break;
+		if (targetOverride == default)
+		{
+			switch (type)
+			{
+				case TargetType.Death:
+					{
+						if (DataCenter.DeathTarget != null)
+						{
+							return DataCenter.DeathTarget;
+						}
+					}
+					break;
 
-            case TargetType.Move:
-                // No filtering needed for Move type
-                break;
+				case TargetType.Move:
+					break;
 
-            case TargetType.FriendMove:
-                {
-                    if (Svc.Targets.FocusTarget != null)
-                    {
-                        if (Svc.Targets.FocusTarget is IBattleChara focus && focus.IsParty())
-                        {
-                            return focus;
-                        }
-                    }
-                    else if (Svc.Targets.Target != null)
-                    {
-                        if (Svc.Targets.Target is IBattleChara targ && targ.IsParty())
-                        {
-                            return targ;
-                        }
-                    }
-                }
-                break;
+				case TargetType.FriendMove:
+					{
+						if (Svc.Targets.FocusTarget != null)
+						{
+							if (Svc.Targets.FocusTarget is IBattleChara focus && focus.IsParty())
+							{
+								return focus;
+							}
+						}
+						else if (Svc.Targets.Target != null)
+						{
+							if (Svc.Targets.Target is IBattleChara targ && targ.IsParty())
+							{
+								return targ;
+							}
+						}
+					}
+					break;
 
-            default:
-                {
-                    var filtered = new List<IBattleChara>();
-                    foreach (var t in battleChara)
-                    {
-                        if (ObjectHelper.IsAlive(t))
-                        {
-                            filtered.Add(t);
-                        }
-                    }
-                    battleChara = filtered;
-                }
-                break;
-        }
+				default:
+					{
+						var filtered = new List<IBattleChara>();
+						foreach (var t in battleChara)
+						{
+							if (ObjectHelper.IsAlive(t))
+							{
+								filtered.Add(t);
+							}
+						}
+						battleChara = filtered;
+					}
+					break;
+			}
 
-        return type switch // Find the object.
-        {
-            TargetType.BeAttacked => FindBeAttackedTarget(),
-            TargetType.Provoke => FindProvokeTarget(),
-            TargetType.Dispel => FindDispelTarget(),
-            TargetType.Move => FindTargetForMoving(),
-            TargetType.Heal => FindHealTarget(healRatio),
-            TargetType.Interrupt => FindInterruptTarget(),
-            TargetType.Tank => FindTankTarget(),
-            TargetType.Melee => battleChara != null ? RandomMeleeTarget(battleChara) : null,
-            TargetType.Range => battleChara != null ? RandomRangeTarget(battleChara) : null,
-            TargetType.Magical => battleChara != null ? RandomMagicalTarget(battleChara) : null,
-            TargetType.Physical => battleChara != null ? RandomPhysicalTarget(battleChara) : null,
-            TargetType.DarkCannon => FindDarkCannonTarget(),
-            TargetType.ShockCannon => FindShockCannonTarget(),
-            TargetType.PhantomBell => FindPhantomBell(),
-            TargetType.PhantomRespite => FindPhantomRespite(),
-            TargetType.DancePartner => FindDancePartner(),
-            TargetType.MimicryTarget => FindMimicryTarget(),
-            TargetType.TheSpear => FindTheSpear(),
-            TargetType.TheBalance => FindTheBalance(),
-            TargetType.Kardia => FindKardia(),
-            TargetType.Deployment => FindDeploymentTacticsTarget(),
-            _ => FindHostile(),
-        };
+			return type switch
+			{
+				TargetType.BeAttacked => FindBeAttackedTarget(),
+				TargetType.Provoke => FindProvokeTarget(),
+				TargetType.Dispel => FindDispelTarget(),
+				TargetType.Move => FindTargetForMoving(),
+				TargetType.Heal => FindHealTarget(healRatio),
+				TargetType.Interrupt => FindInterruptTarget(),
+				TargetType.Tank => FindTankTarget(),
+				TargetType.Melee => battleChara != null ? RandomMeleeTarget(battleChara) : null,
+				TargetType.Range => battleChara != null ? RandomRangeTarget(battleChara) : null,
+				TargetType.Magical => battleChara != null ? RandomMagicalTarget(battleChara) : null,
+				TargetType.Physical => battleChara != null ? RandomPhysicalTarget(battleChara) : null,
+				TargetType.DarkCannon => FindDarkCannonTarget(),
+				TargetType.ShockCannon => FindShockCannonTarget(),
+				TargetType.PhantomBell => FindPhantomBell(),
+				TargetType.PhantomRespite => FindPhantomRespite(),
+				TargetType.DancePartner => FindDancePartner(),
+				TargetType.MimicryTarget => FindMimicryTarget(),
+				TargetType.TheSpear => FindTheSpear(),
+				TargetType.TheBalance => FindTheBalance(),
+				TargetType.Kardia => FindKardia(),
+				TargetType.Deployment => FindDeploymentTacticsTarget(),
+				_ => isFriendly ? FindFriendly() : FindHostile(),
+			};
+		}
 
-        IBattleChara? FindDarkCannonTarget()
+		if (targetOverride != default)
+		{
+			switch (targetOverride)
+			{
+				case TargetType.Death:
+					{
+						if (DataCenter.DeathTarget != null)
+						{
+							return DataCenter.DeathTarget;
+						}
+					}
+					break;
+
+				case TargetType.Move:
+					break;
+
+				case TargetType.FriendMove:
+					{
+						if (Svc.Targets.FocusTarget != null)
+						{
+							if (Svc.Targets.FocusTarget is IBattleChara focus && focus.IsParty())
+							{
+								return focus;
+							}
+						}
+						else if (Svc.Targets.Target != null)
+						{
+							if (Svc.Targets.Target is IBattleChara targ && targ.IsParty())
+							{
+								return targ;
+							}
+						}
+					}
+					break;
+
+				default:
+					{
+						var filtered = new List<IBattleChara>();
+						foreach (var t in battleChara)
+						{
+							if (ObjectHelper.IsAlive(t))
+							{
+								filtered.Add(t);
+							}
+						}
+						battleChara = filtered;
+					}
+					break;
+			}
+
+			return targetOverride switch
+			{
+				TargetType.BeAttacked => FindBeAttackedTarget(),
+				TargetType.Provoke => FindProvokeTarget(),
+				TargetType.Dispel => FindDispelTarget(),
+				TargetType.Move => FindTargetForMoving(),
+				TargetType.Heal => FindHealTarget(healRatio),
+				TargetType.Interrupt => FindInterruptTarget(),
+				TargetType.Tank => FindTankTarget(),
+				TargetType.Melee => battleChara != null ? RandomMeleeTarget(battleChara) : null,
+				TargetType.Range => battleChara != null ? RandomRangeTarget(battleChara) : null,
+				TargetType.Magical => battleChara != null ? RandomMagicalTarget(battleChara) : null,
+				TargetType.Physical => battleChara != null ? RandomPhysicalTarget(battleChara) : null,
+				TargetType.DarkCannon => FindDarkCannonTarget(),
+				TargetType.ShockCannon => FindShockCannonTarget(),
+				TargetType.PhantomBell => FindPhantomBell(),
+				TargetType.PhantomRespite => FindPhantomRespite(),
+				TargetType.DancePartner => FindDancePartner(),
+				TargetType.MimicryTarget => FindMimicryTarget(),
+				TargetType.TheSpear => FindTheSpear(),
+				TargetType.TheBalance => FindTheBalance(),
+				TargetType.Kardia => FindKardia(),
+				TargetType.Deployment => FindDeploymentTacticsTarget(),
+				_ => isFriendly ? FindFriendly() : FindHostile(),
+			};
+		}
+
+		IBattleChara? FindFriendly()
+		{
+			if (battleChara == null)
+			{
+				return null;
+			}
+
+			// Prepare a list to sort manually
+			List<IBattleChara> objects = [.. battleChara];
+
+			List<IBattleChara> filtered = [.. objects];
+
+			if (targetOverride != default)
+			{
+				switch (targetOverride)
+				{
+					case TargetType.Small:
+						if (Service.Config.SmallHp)
+						{
+							// Order by HitboxRadius ascending, then by CurrentHp ascending
+							filtered = [.. objects];
+							filtered.Sort((a, b) =>
+							{
+								int cmp = a.HitboxRadius.CompareTo(b.HitboxRadius);
+								if (cmp != 0) return cmp;
+								float aHp = a is IBattleChara ba ? ba.CurrentHp : float.MaxValue;
+								float bHp = b is IBattleChara bb ? bb.CurrentHp : float.MaxValue;
+								return aHp.CompareTo(bHp);
+							});
+						}
+						else
+						{
+							// Order by HitboxRadius ascending, then by CurrentHp descending
+							filtered = [.. objects];
+							filtered.Sort((a, b) =>
+							{
+								int cmp = a.HitboxRadius.CompareTo(b.HitboxRadius);
+								if (cmp != 0) return cmp;
+								float aHp = a is IBattleChara ba ? ba.CurrentHp : 0;
+								float bHp = b is IBattleChara bb ? bb.CurrentHp : 0;
+								return bHp.CompareTo(aHp);
+							});
+						}
+						break;
+					case TargetType.HighHP:
+						filtered = [.. objects];
+						filtered.Sort((a, b) =>
+						{
+							uint aHp = a is IBattleChara ba ? ba.CurrentHp : 0;
+							uint bHp = b is IBattleChara bb ? bb.CurrentHp : 0;
+							return bHp.CompareTo(aHp);
+						});
+						break;
+					case TargetType.LowHP:
+						filtered = [.. objects];
+						filtered.Sort((a, b) =>
+						{
+							uint aHp = a is IBattleChara ba ? ba.CurrentHp : 0;
+							uint bHp = b is IBattleChara bb ? bb.CurrentHp : 0;
+							return aHp.CompareTo(bHp);
+						});
+						break;
+					case TargetType.HighHPPercent:
+						filtered = [.. objects];
+						filtered.Sort((a, b) =>
+						{
+							float aPct = a is IBattleChara ba && ba.MaxHp != 0 ? (float)ba.CurrentHp / ba.MaxHp : 0;
+							float bPct = b is IBattleChara bb && bb.MaxHp != 0 ? (float)bb.CurrentHp / bb.MaxHp : 0;
+							return bPct.CompareTo(aPct);
+						});
+						break;
+					case TargetType.LowHPPercent:
+						filtered = [.. objects];
+						filtered.Sort((a, b) =>
+						{
+							float aPct = a is IBattleChara ba && ba.MaxHp != 0 ? (float)ba.CurrentHp / ba.MaxHp : 0;
+							float bPct = b is IBattleChara bb && bb.MaxHp != 0 ? (float)bb.CurrentHp / bb.MaxHp : 0;
+							return aPct.CompareTo(bPct);
+						});
+						break;
+					case TargetType.HighMaxHP:
+						filtered = [.. objects];
+						filtered.Sort((a, b) =>
+						{
+							uint aHp = a is IBattleChara ba ? ba.MaxHp : 0;
+							uint bHp = b is IBattleChara bb ? bb.MaxHp : 0;
+							return bHp.CompareTo(aHp);
+						});
+						break;
+					case TargetType.LowMaxHP:
+						filtered = [.. objects];
+						filtered.Sort((a, b) =>
+						{
+							uint aHp = a is IBattleChara ba ? ba.MaxHp : 0;
+							uint bHp = b is IBattleChara bb ? bb.MaxHp : 0;
+							return aHp.CompareTo(bHp);
+						});
+						break;
+					case TargetType.Nearest:
+						filtered = [.. objects];
+						filtered.Sort((a, b) => a.DistanceToPlayer().CompareTo(b.DistanceToPlayer()));
+						break;
+					case TargetType.Farthest:
+						filtered = [.. objects];
+						filtered.Sort((a, b) => b.DistanceToPlayer().CompareTo(a.DistanceToPlayer()));
+						break;
+					case TargetType.PvPHealers:
+						{
+							// Filter for healers
+							List<IBattleChara> healers = [];
+							foreach (var p in objects)
+							{
+								if (p.IsJobs(JobRole.Healer.ToJobs()))
+									healers.Add(p);
+							}
+							if (healers.Count > 0)
+							{
+								healers.Sort((a, b) => a.DistanceToPlayer().CompareTo(b.DistanceToPlayer()));
+								filtered = healers;
+							}
+							else
+							{
+								filtered = [.. objects];
+								filtered.Sort((a, b) => a.DistanceToPlayer().CompareTo(b.DistanceToPlayer()));
+							}
+							break;
+						}
+					case TargetType.PvPTanks:
+						{
+							List<IBattleChara> tanks = [];
+							foreach (var p in objects)
+							{
+								if (p.IsJobs(JobRole.Tank.ToJobs()))
+									tanks.Add(p);
+							}
+							if (tanks.Count > 0)
+							{
+								tanks.Sort((a, b) => a.DistanceToPlayer().CompareTo(b.DistanceToPlayer()));
+								filtered = tanks;
+							}
+							else
+							{
+								filtered = [.. objects];
+								filtered.Sort((a, b) => a.DistanceToPlayer().CompareTo(b.DistanceToPlayer()));
+							}
+							break;
+						}
+					case TargetType.PvPDPS:
+						{
+							List<IBattleChara> dps = [];
+							foreach (var p in objects)
+							{
+								if (p.IsJobs(JobRole.AllDPS.ToJobs()))
+									dps.Add(p);
+							}
+							if (dps.Count > 0)
+							{
+								dps.Sort((a, b) => a.DistanceToPlayer().CompareTo(b.DistanceToPlayer()));
+								filtered = dps;
+							}
+							else
+							{
+								filtered = [.. objects];
+								filtered.Sort((a, b) => a.DistanceToPlayer().CompareTo(b.DistanceToPlayer()));
+							}
+							break;
+						}
+					default:
+						if (Service.Config.SmallHp)
+						{
+							filtered = [.. objects];
+							filtered.Sort((a, b) =>
+							{
+								int cmp = b.HitboxRadius.CompareTo(a.HitboxRadius);
+								if (cmp != 0) return cmp;
+								float aHp = a is IBattleChara ba ? ba.CurrentHp : float.MaxValue;
+								float bHp = b is IBattleChara bb ? bb.CurrentHp : float.MaxValue;
+								return aHp.CompareTo(bHp);
+							});
+						}
+						else
+						{
+							filtered = [.. objects];
+							filtered.Sort((a, b) =>
+							{
+								int cmp = b.HitboxRadius.CompareTo(a.HitboxRadius);
+								if (cmp != 0) return cmp;
+								float aHp = a is IBattleChara ba ? ba.CurrentHp : 0;
+								float bHp = b is IBattleChara bb ? bb.CurrentHp : 0;
+								return bHp.CompareTo(aHp);
+							});
+						}
+						break;
+				}
+			}
+
+			if (targetOverride == default)
+			{
+				switch (type)
+				{
+					case TargetType.Small:
+						if (Service.Config.SmallHp)
+						{
+							// Order by HitboxRadius ascending, then by CurrentHp ascending
+							filtered = [.. objects];
+							filtered.Sort((a, b) =>
+							{
+								int cmp = a.HitboxRadius.CompareTo(b.HitboxRadius);
+								if (cmp != 0) return cmp;
+								float aHp = a is IBattleChara ba ? ba.CurrentHp : float.MaxValue;
+								float bHp = b is IBattleChara bb ? bb.CurrentHp : float.MaxValue;
+								return aHp.CompareTo(bHp);
+							});
+						}
+						else
+						{
+							// Order by HitboxRadius ascending, then by CurrentHp descending
+							filtered = [.. objects];
+							filtered.Sort((a, b) =>
+							{
+								int cmp = a.HitboxRadius.CompareTo(b.HitboxRadius);
+								if (cmp != 0) return cmp;
+								float aHp = a is IBattleChara ba ? ba.CurrentHp : 0;
+								float bHp = b is IBattleChara bb ? bb.CurrentHp : 0;
+								return bHp.CompareTo(aHp);
+							});
+						}
+						break;
+					case TargetType.HighHP:
+						filtered = [.. objects];
+						filtered.Sort((a, b) =>
+						{
+							uint aHp = a is IBattleChara ba ? ba.CurrentHp : 0;
+							uint bHp = b is IBattleChara bb ? bb.CurrentHp : 0;
+							return bHp.CompareTo(aHp);
+						});
+						break;
+					case TargetType.LowHP:
+						filtered = [.. objects];
+						filtered.Sort((a, b) =>
+						{
+							uint aHp = a is IBattleChara ba ? ba.CurrentHp : 0;
+							uint bHp = b is IBattleChara bb ? bb.CurrentHp : 0;
+							return aHp.CompareTo(bHp);
+						});
+						break;
+					case TargetType.HighHPPercent:
+						filtered = [.. objects];
+						filtered.Sort((a, b) =>
+						{
+							float aPct = a is IBattleChara ba && ba.MaxHp != 0 ? (float)ba.CurrentHp / ba.MaxHp : 0;
+							float bPct = b is IBattleChara bb && bb.MaxHp != 0 ? (float)bb.CurrentHp / bb.MaxHp : 0;
+							return bPct.CompareTo(aPct);
+						});
+						break;
+					case TargetType.LowHPPercent:
+						filtered = [.. objects];
+						filtered.Sort((a, b) =>
+						{
+							float aPct = a is IBattleChara ba && ba.MaxHp != 0 ? (float)ba.CurrentHp / ba.MaxHp : 0;
+							float bPct = b is IBattleChara bb && bb.MaxHp != 0 ? (float)bb.CurrentHp / bb.MaxHp : 0;
+							return aPct.CompareTo(bPct);
+						});
+						break;
+					case TargetType.HighMaxHP:
+						filtered = [.. objects];
+						filtered.Sort((a, b) =>
+						{
+							uint aHp = a is IBattleChara ba ? ba.MaxHp : 0;
+							uint bHp = b is IBattleChara bb ? bb.MaxHp : 0;
+							return bHp.CompareTo(aHp);
+						});
+						break;
+					case TargetType.LowMaxHP:
+						filtered = [.. objects];
+						filtered.Sort((a, b) =>
+						{
+							uint aHp = a is IBattleChara ba ? ba.MaxHp : 0;
+							uint bHp = b is IBattleChara bb ? bb.MaxHp : 0;
+							return aHp.CompareTo(bHp);
+						});
+						break;
+					case TargetType.Nearest:
+						filtered = [.. objects];
+						filtered.Sort((a, b) => a.DistanceToPlayer().CompareTo(b.DistanceToPlayer()));
+						break;
+					case TargetType.Farthest:
+						filtered = [.. objects];
+						filtered.Sort((a, b) => b.DistanceToPlayer().CompareTo(a.DistanceToPlayer()));
+						break;
+					case TargetType.PvPHealers:
+						{
+							// Filter for healers
+							List<IBattleChara> healers = [];
+							foreach (var p in objects)
+							{
+								if (p.IsJobs(JobRole.Healer.ToJobs()))
+									healers.Add(p);
+							}
+							if (healers.Count > 0)
+							{
+								healers.Sort((a, b) => a.DistanceToPlayer().CompareTo(b.DistanceToPlayer()));
+								filtered = healers;
+							}
+							else
+							{
+								filtered = [.. objects];
+								filtered.Sort((a, b) => a.DistanceToPlayer().CompareTo(b.DistanceToPlayer()));
+							}
+							break;
+						}
+					case TargetType.PvPTanks:
+						{
+							List<IBattleChara> tanks = [];
+							foreach (var p in objects)
+							{
+								if (p.IsJobs(JobRole.Tank.ToJobs()))
+									tanks.Add(p);
+							}
+							if (tanks.Count > 0)
+							{
+								tanks.Sort((a, b) => a.DistanceToPlayer().CompareTo(b.DistanceToPlayer()));
+								filtered = tanks;
+							}
+							else
+							{
+								filtered = [.. objects];
+								filtered.Sort((a, b) => a.DistanceToPlayer().CompareTo(b.DistanceToPlayer()));
+							}
+							break;
+						}
+					case TargetType.PvPDPS:
+						{
+							List<IBattleChara> dps = [];
+							foreach (var p in objects)
+							{
+								if (p.IsJobs(JobRole.AllDPS.ToJobs()))
+									dps.Add(p);
+							}
+							if (dps.Count > 0)
+							{
+								dps.Sort((a, b) => a.DistanceToPlayer().CompareTo(b.DistanceToPlayer()));
+								filtered = dps;
+							}
+							else
+							{
+								filtered = [.. objects];
+								filtered.Sort((a, b) => a.DistanceToPlayer().CompareTo(b.DistanceToPlayer()));
+							}
+							break;
+						}
+					default:
+						if (Service.Config.SmallHp)
+						{
+							filtered = [.. objects];
+							filtered.Sort((a, b) =>
+							{
+								int cmp = b.HitboxRadius.CompareTo(a.HitboxRadius);
+								if (cmp != 0) return cmp;
+								float aHp = a is IBattleChara ba ? ba.CurrentHp : float.MaxValue;
+								float bHp = b is IBattleChara bb ? bb.CurrentHp : float.MaxValue;
+								return aHp.CompareTo(bHp);
+							});
+						}
+						else
+						{
+							filtered = [.. objects];
+							filtered.Sort((a, b) =>
+							{
+								int cmp = b.HitboxRadius.CompareTo(a.HitboxRadius);
+								if (cmp != 0) return cmp;
+								float aHp = a is IBattleChara ba ? ba.CurrentHp : 0;
+								float bHp = b is IBattleChara bb ? bb.CurrentHp : 0;
+								return bHp.CompareTo(aHp);
+							});
+						}
+						break;
+				}
+			}
+
+            for (int i = 0; i < filtered.Count; i++)
+			{
+                IBattleChara? obj = filtered[i];
+                if (obj is IBattleChara bc)
+					return bc;
+			}
+			return null;
+		}
+
+		IBattleChara? FindDarkCannonTarget()
         {
             if (battleChara != null)
             {
@@ -1415,8 +1967,8 @@ public struct ActionTargetInfo(IBaseAction action)
             }
             if (partyMembers != null && partyMembers.Count > 0)
             {
-                var bePartyAttackedTarget = FindTargetByType(partyMembers, TargetType.BeAttacked, 0, SpecialActionType.None);
-                var beAllAttackedTarget = FindTargetByType(allMembers, TargetType.BeAttacked, 0, SpecialActionType.None);
+                var bePartyAttackedTarget = FindTargetByType(partyMembers, TargetType.BeAttacked, 0, SpecialActionType.None, targetOverride, isFriendly);
+                var beAllAttackedTarget = FindTargetByType(allMembers, TargetType.BeAttacked, 0, SpecialActionType.None, targetOverride, isFriendly);
                 // Compare by reference or GameObjectId (safer for IBattleChara)
                 if (bePartyAttackedTarget != null && beAllAttackedTarget != null &&
                     bePartyAttackedTarget.GameObjectId == beAllAttackedTarget.GameObjectId)
@@ -1426,7 +1978,7 @@ public struct ActionTargetInfo(IBaseAction action)
             }
 
             // Fallback: only return self if self does NOT have BattleBell
-            if (!Player.Object.HasStatus(true, StatusID.BattleBell) || !Player.Object.HasStatus(false, StatusID.BattleBell))
+            if (!StatusHelper.PlayerHasStatus(true, StatusID.BattleBell) || !StatusHelper.PlayerHasStatus(false, StatusID.BattleBell))
             {
                 return Player.Object;
             }
@@ -1463,8 +2015,8 @@ public struct ActionTargetInfo(IBaseAction action)
             if (partyMembers != null && partyMembers.Count > 0)
             {
                 // Use FindTargetByType to get the BeAttacked target from party members
-                var bePartyAttackedTarget = FindTargetByType(partyMembers, TargetType.BeAttacked, 0, SpecialActionType.None);
-                var beAllAttackedTarget = FindTargetByType(allMembers, TargetType.BeAttacked, 0, SpecialActionType.None);
+                var bePartyAttackedTarget = FindTargetByType(partyMembers, TargetType.BeAttacked, 0, SpecialActionType.None, targetOverride, isFriendly);
+                var beAllAttackedTarget = FindTargetByType(allMembers, TargetType.BeAttacked, 0, SpecialActionType.None, targetOverride, isFriendly);
                 // Compare by reference or GameObjectId (safer for IBattleChara)
                 if (bePartyAttackedTarget != null && beAllAttackedTarget != null &&
                     bePartyAttackedTarget.GameObjectId == beAllAttackedTarget.GameObjectId)
@@ -1481,12 +2033,17 @@ public struct ActionTargetInfo(IBaseAction action)
         {
             List<Job> dancePartnerPriority = OtherConfiguration.DancePartnerPriority;
 
-            if (!Player.Object.IsJobs(Job.DNC))
+			if (!DataCenter.PlayerAvailable())
+			{
+				return null;
+			}
+
+			if (!TargetFilter.PlayerIsJobs(Job.DNC))
             {
                 return null;
             }
 
-            if (Player.Object.HasStatus(true, StatusID.ClosedPosition))
+            if (StatusHelper.PlayerHasStatus(true, StatusID.ClosedPosition))
             {
                 return null;
             }
@@ -1515,12 +2072,18 @@ public struct ActionTargetInfo(IBaseAction action)
                     {
                         if (member.IsConditionCannotTarget())
                         {
-                            PluginLog.Debug($"FindDancePartner: {member.Name} selected target.");
+							if (Service.Config.InDebug)
+							{
+								PluginLog.Debug($"FindDancePartner: {member.Name} selected target.");
+							}
                             return null;
                         }
                         if (!member.IsConditionCannotTarget())
                         {
-                            PluginLog.Debug($"FindDancePartner: {member.Name} selected target.");
+							if (Service.Config.InDebug)
+							{
+								PluginLog.Debug($"FindDancePartner: {member.Name} selected target.");
+							}
                             return member;
                         }
                     }
@@ -1536,19 +2099,28 @@ public struct ActionTargetInfo(IBaseAction action)
                     {
                         if (member.IsConditionCannotTarget())
                         {
-                            PluginLog.Debug($"FindDancePartner: {member.Name} secondary logic target.");
+							if (Service.Config.InDebug)
+							{
+								PluginLog.Debug($"FindDancePartner: {member.Name} secondary logic target.");
+							}
                             return null;
                         }
                         if (!member.IsConditionCannotTarget())
                         {
-                            PluginLog.Debug($"FindDancePartner: {member.Name} secondary logic target.");
+							if (Service.Config.InDebug)
+							{
+								PluginLog.Debug($"FindDancePartner: {member.Name} secondary logic target.");
+							}
                             return member;
                         }
                     }
                 }
             }
 
-            PluginLog.Debug($"FindDancePartner: No target found, using fallback.");
+			if (Service.Config.InDebug)
+			{
+				PluginLog.Debug($"FindDancePartner: No target found, using fallback.");
+			}
 
             IBattleChara? result = RandomMeleeTarget(battleChara);
             if (result != null) return result;
@@ -1566,7 +2138,7 @@ public struct ActionTargetInfo(IBaseAction action)
             // The Spear priority based on the info from The Balance Discord (user-configurable)
             List<Job> TheSpearPriority = OtherConfiguration.TheSpearPriority;
 
-            if (!Player.Object.IsJobs(Job.AST))
+            if (!TargetFilter.PlayerIsJobs(Job.AST))
             {
                 return null;
             }
@@ -1587,7 +2159,8 @@ public struct ActionTargetInfo(IBaseAction action)
             {
                 if (m == null) continue;
                 if (m == Player.Object) continue; // never card self
-                if (m.IsDead) continue;
+				if (ObjectHelper.IsPlayerCharacterChocobo(m)) continue;
+				if (m.IsDead) continue;
                 if (m.IsConditionCannotTarget()) continue;
                 //if (StatusHelper.IsStatusCapped(m)) continue; // cannot receive more statuses
                 if (m.HasStatus(false, StatusID.DamageDown_2911, StatusID.DamageDown, StatusID.Weakness, StatusID.BrinkOfDeath)) continue; // poor target value
@@ -1640,7 +2213,10 @@ public struct ActionTargetInfo(IBaseAction action)
             }
             if (best != null)
             {
-                PluginLog.Debug($"FindTheSpear: {best.Name} selected by priority index {bestIndex} with tie-breakers.");
+				if (Service.Config.InDebug)
+				{
+					PluginLog.Debug($"FindTheSpear: {best.Name} selected by priority index {bestIndex} with tie-breakers.");
+				}
                 return best;
             }
 
@@ -1662,7 +2238,7 @@ public struct ActionTargetInfo(IBaseAction action)
             // The Balance priority based on the info from The Balance Discord (user-configurable)
             List<Job> TheBalancePriority = OtherConfiguration.TheBalancePriority;
 
-            if (!Player.Object.IsJobs(Job.AST))
+            if (!TargetFilter.PlayerIsJobs(Job.AST))
             {
                 return null;
             }
@@ -1683,7 +2259,8 @@ public struct ActionTargetInfo(IBaseAction action)
             {
                 if (m == null) continue;
                 if (m == Player.Object) continue; // never card self
-                if (m.IsDead) continue;
+				if (ObjectHelper.IsPlayerCharacterChocobo(m)) continue;
+				if (m.IsDead) continue;
                 if (m.IsConditionCannotTarget()) continue;
                 //if (StatusHelper.IsStatusCapped(m)) continue; // cannot receive more statuses
                 if (m.HasStatus(false, StatusID.DamageDown_2911, StatusID.DamageDown, StatusID.Weakness, StatusID.BrinkOfDeath)) continue; // poor target value
@@ -1736,7 +2313,10 @@ public struct ActionTargetInfo(IBaseAction action)
             }
             if (best != null)
             {
-                PluginLog.Debug($"FindTheBalance: {best.Name} selected by priority index {bestIndex} with tie-breakers.");
+				if (Service.Config.InDebug)
+				{
+					PluginLog.Debug($"FindTheBalance: {best.Name} selected by priority index {bestIndex} with tie-breakers.");
+				}
                 return best;
             }
 
@@ -1757,7 +2337,7 @@ public struct ActionTargetInfo(IBaseAction action)
         {
             List<Job> KardiaTankPriority = OtherConfiguration.KardiaTankPriority;
 
-            if (!Player.Object.IsJobs(Job.SGE))
+            if (!TargetFilter.PlayerIsJobs(Job.SGE))
             {
                 return null;
             }
@@ -1783,12 +2363,18 @@ public struct ActionTargetInfo(IBaseAction action)
                         {
                             if (m.IsConditionCannotTarget())
                             {
-                                PluginLog.Debug($"FindKardia 1: {m.Name} is a tank with TankStanceStatus and without Kardion.");
+								if (Service.Config.InDebug)
+								{
+									PluginLog.Debug($"FindKardia 1: {m.Name} is a tank with TankStanceStatus and without Kardion.");
+								}
                                 return null;
                             }
                             if (!m.IsConditionCannotTarget())
                             {
-                                PluginLog.Debug($"FindKardia 1: {m.Name} is a tank with TankStanceStatus and without Kardion.");
+								if (Service.Config.InDebug)
+								{
+									PluginLog.Debug($"FindKardia 1: {m.Name} is a tank with TankStanceStatus and without Kardion.");
+								}
                                 return m;
                             }
                         }
@@ -1807,12 +2393,18 @@ public struct ActionTargetInfo(IBaseAction action)
                         {
                             if (m.IsConditionCannotTarget())
                             {
-                                PluginLog.Debug($"FindKardia 2: {m.Name} is a tank with TankStanceStatus.");
+								if (Service.Config.InDebug)
+								{
+									PluginLog.Debug($"FindKardia 2: {m.Name} is a tank with TankStanceStatus.");
+								}
                                 return null;
                             }
                             if (!m.IsConditionCannotTarget())
                             {
-                                PluginLog.Debug($"FindKardia 2: {m.Name} is a tank with TankStanceStatus.");
+								if (Service.Config.InDebug)
+								{
+									PluginLog.Debug($"FindKardia 2: {m.Name} is a tank with TankStanceStatus.");
+								}
                                 return m;
                             }
                         }
@@ -1829,19 +2421,28 @@ public struct ActionTargetInfo(IBaseAction action)
                         // 3. Any alive tank in priority order
                         if (m.IsConditionCannotTarget())
                         {
-                            PluginLog.Debug($"FindKardia 3: {m.Name} is a tank fallback.");
+							if (Service.Config.InDebug)
+							{
+								PluginLog.Debug($"FindKardia 3: {m.Name} is a tank fallback.");
+							}
                             return null;
                         }
                         if (!m.IsConditionCannotTarget())
                         {
-                            PluginLog.Debug($"FindKardia 3: {m.Name} is a tank fallback.");
+							if (Service.Config.InDebug)
+							{
+								PluginLog.Debug($"FindKardia 3: {m.Name} is a tank fallback.");
+							}
                             return m;
                         }
                     }
                 }
             }
 
-            PluginLog.Debug($"FindKardia: No target found, using fallback.");
+			if (Service.Config.InDebug)
+			{
+				PluginLog.Debug($"FindKardia: No target found, using fallback.");
+			}
             IBattleChara? fallback = null;
             fallback = FindTankTarget();
             if (fallback != null) return fallback;
@@ -1858,7 +2459,7 @@ public struct ActionTargetInfo(IBaseAction action)
 
         IBattleChara? FindDeploymentTacticsTarget()
         {
-            if (!Player.Object.IsJobs(Job.SCH))
+            if (!TargetFilter.PlayerIsJobs(Job.SCH))
             {
                 return null;
             }
@@ -1930,13 +2531,19 @@ public struct ActionTargetInfo(IBaseAction action)
 
             if (bestCatalyze != null)
             {
-                PluginLog.Debug($"FindDeploymentTacticsTarget: {bestCatalyze.Name} is a valid target with Catalyze, largest shield, and nearby allies.");
+				if (Service.Config.InDebug)
+				{
+					PluginLog.Debug($"FindDeploymentTacticsTarget: {bestCatalyze.Name} is a valid target with Catalyze, largest shield, and nearby allies.");
+				}
                 return bestCatalyze;
             }
 
             if (bestGalvanize != null && bestCatalyze == null)
             {
-                PluginLog.Debug($"FindDeploymentTacticsTarget: {bestGalvanize.Name} is a valid target with Galvanize, largest shield, and nearby allies.");
+				if (Service.Config.InDebug)
+				{
+					PluginLog.Debug($"FindDeploymentTacticsTarget: {bestGalvanize.Name} is a valid target with Galvanize, largest shield, and nearby allies.");
+				}
                 return bestGalvanize;
             }
 
@@ -1945,18 +2552,14 @@ public struct ActionTargetInfo(IBaseAction action)
 
         IBattleChara? FindProvokeTarget()
         {
-            if (battleChara == null || DataCenter.ProvokeTarget == null)
-            {
-                return null;
-            }
-
-            if (DataCenter.ProvokeTarget != null)
-            {
-                return DataCenter.ProvokeTarget;
-            }
-
-            return null;
-        }
+			if (battleChara != null && DataCenter.ProvokeTarget != null)
+			{
+				foreach (var o in battleChara)
+					if (o.GameObjectId == DataCenter.ProvokeTarget.GameObjectId)
+						return DataCenter.ProvokeTarget;
+			}
+			return null;
+		}
 
         IBattleChara? FindTargetForMoving()
         {
@@ -1965,7 +2568,12 @@ public struct ActionTargetInfo(IBaseAction action)
                 : Service.Config.MoveTowardsScreenCenter ? FindMoveTargetScreenCenter() : FindMoveTargetFaceDirection();
             IBattleChara? FindMoveTargetScreenCenter()
             {
-                Vector3 pPosition = Player.Object.Position;
+				if (Player.Object == null)
+				{
+					return null;
+				}
+
+				Vector3 pPosition = Player.Object.Position;
                 if (!Svc.GameGui.WorldToScreen(pPosition, out Vector2 playerScrPos))
                 {
                     return null;
@@ -1999,7 +2607,12 @@ public struct ActionTargetInfo(IBaseAction action)
 
             IBattleChara? FindMoveTargetFaceDirection()
             {
-                Vector3 pPosition = Player.Object.Position;
+				if (Player.Object == null)
+				{
+					return null;
+				}
+
+				Vector3 pPosition = Player.Object.Position;
                 Vector3 faceVec = Player.Object.GetFaceVector();
 
                 List<IBattleChara> filteredTargets = [];
@@ -2131,7 +2744,7 @@ public struct ActionTargetInfo(IBaseAction action)
                     }
                 }
 
-                if (Player.Object.GetHealthRatio() <= Service.Config.HealthSelfRatio)
+                if (ObjectHelper.GetPlayerHealthRatio() <= Service.Config.HealthSelfRatio)
                 {
                     return Player.Object;
                 }
@@ -2507,38 +3120,96 @@ public struct ActionTargetInfo(IBaseAction action)
                 }
                 return lowest;
             }
-            else
-            {
-                IBattleChara? lowest = null;
-                float minHealth = float.MaxValue;
-                foreach (var t in attachedT)
-                {
-                    float health = ObjectHelper.GetHealthRatio(t);
-                    if (health < minHealth)
-                    {
-                        minHealth = health;
-                        lowest = t;
-                    }
-                }
-                return lowest;
-            }
-        }
+			else
+			{
+				IBattleChara? highest = null;
+				float maxHealth = float.MinValue;
+				foreach (var t in attachedT)
+				{
+					float health = ObjectHelper.GetHealthRatio(t);
+					if (health > maxHealth)
+					{
+						maxHealth = health;
+						highest = t;
+					}
+				}
+				return highest;
+			}
+		}
 
         IBattleChara? FindDispelTarget()
         {
-            if (battleChara == null || DataCenter.DispelTarget == null)
-            {
-                return null;
-            }
-
-            return DataCenter.DispelTarget;
-        }
+			if (battleChara != null && DataCenter.DispelTarget != null)
+			{
+				foreach (var o in battleChara)
+					if (o.GameObjectId == DataCenter.DispelTarget.GameObjectId)
+						return DataCenter.DispelTarget;
+			}
+			return null;
+		}
 
         IBattleChara? FindTankTarget()
         {
-            return battleChara == null ? null : RandomPickByJobs(battleChara, JobRole.Tank);
-        }
-    }
+			if (DataCenter.PartyMembers == null)
+			{
+				return null;
+			}
+
+			foreach (IBattleChara m in DataCenter.PartyMembers)
+			{
+				if (m.IsJobCategory(JobRole.Tank) && !m.IsDead)
+				{
+					// 1. Tanks with tank stance
+					if (m.HasStatus(false, StatusHelper.TankStanceStatus))
+					{
+						if (m.IsConditionCannotTarget())
+						{
+							if (Service.Config.InDebug)
+							{
+								PluginLog.Debug($"FindTankTarget 1: {m.Name} is a tank with TankStanceStatus.");
+							}
+							return null;
+						}
+						if (!m.IsConditionCannotTarget())
+						{
+							if (Service.Config.InDebug)
+							{
+								PluginLog.Debug($"FindTankTarget 1: {m.Name} is a tank with TankStanceStatus.");
+							}
+							return m;
+						}
+					}
+				}
+			}
+
+			foreach (IBattleChara m in DataCenter.PartyMembers)
+			{
+				if (m.IsJobCategory(JobRole.Tank) && !m.IsDead)
+				{
+					if (m.IsConditionCannotTarget())
+					{
+						if (Service.Config.InDebug)
+						{
+							PluginLog.Debug($"FindTankTarget 2: {m.Name} is a tank fallback.");
+						}
+						return null;
+					}
+					if (!m.IsConditionCannotTarget())
+					{
+						if (Service.Config.InDebug)
+						{
+							PluginLog.Debug($"FindTankTarget 2: {m.Name} is a tank fallback.");
+						}
+						return m;
+					}
+				}
+			}
+
+			return battleChara == null ? null : RandomPickByJobs(battleChara, JobRole.Tank);
+		}
+
+		return null;
+	}
 
     private static IBattleChara? FindMimicryTarget()
     {
@@ -2568,7 +3239,12 @@ public struct ActionTargetInfo(IBaseAction action)
 
     private static bool IsNeededRole(IBattleChara character)
     {
-        if (character.GameObjectId == Player.Object.GameObjectId)
+		if (Player.Object == null)
+		{
+			return false;
+		}
+
+		if (character.GameObjectId == Player.Object.GameObjectId)
         {
             return false;
         }
@@ -2690,7 +3366,14 @@ public enum TargetType : byte
     PhantomBell,
     PhantomRespite,
     DarkCannon,
-    ShockCannon
+    ShockCannon,
+    Farthest,
+	Nearest,
+	PvPHealers,
+	PvPTanks,
+	PvPDPS,
+	HighHPPercent,
+	LowHPPercent
 }
 #pragma warning restore CS1591 // Missing XML comment for publicly visible type or member
 

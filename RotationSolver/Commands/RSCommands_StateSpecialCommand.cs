@@ -1,6 +1,7 @@
 ﻿using Dalamud.Game.Config;
 using ECommons.DalamudServices;
 using ECommons.GameHelpers;
+using RotationSolver.IPC;
 using RotationSolver.Updaters;
 
 namespace RotationSolver.Commands
@@ -73,7 +74,12 @@ namespace RotationSolver.Commands
 
         private static StateCommandType AdjustStateType(StateCommandType stateType, ref int index)
         {
-            if (!DataCenter.State && DataCenter.IsPvP && !DataCenter.IsPvPStateEnabled && Service.Config.PvpStateControl)
+			if (DataCenter.IsInDutyReplay())
+			{
+				return StateCommandType.Off;
+			}
+
+			if (!DataCenter.State && DataCenter.IsPvP && !DataCenter.IsPvPStateEnabled && Service.Config.PvpStateControl)
             {
                 return StateCommandType.PvP;
             }
@@ -305,7 +311,8 @@ namespace RotationSolver.Commands
                     DataCenter.IsHenched = false;
                     DataCenter.IsPvPStateEnabled = false;
                     DataCenter.ResetAllRecords();
-                    ActionUpdater.NextAction = ActionUpdater.NextGCDAction = null;
+					Wrath_IPCSubscriber.Release();
+					ActionUpdater.NextAction = ActionUpdater.NextGCDAction = null;
                     DataCenter.TargetingTypeOverride = null;
                     if (Service.Config.ShowToggledSettingInChat) { Svc.Chat.Print($"Targeting : Off"); }
                     break;
@@ -399,7 +406,8 @@ namespace RotationSolver.Commands
                     DataCenter.IsHenched = false;
                     DataCenter.IsPvPStateEnabled = false;
                     DataCenter.ResetAllRecords();
-                    ActionUpdater.NextAction = ActionUpdater.NextGCDAction = null;
+					Wrath_IPCSubscriber.Release();
+					ActionUpdater.NextAction = ActionUpdater.NextGCDAction = null;
                     DataCenter.TargetingTypeOverride = null;
                     if (Service.Config.ShowToggledSettingInChat) { Svc.Chat.Print($"Targeting : Off"); }
                     break;

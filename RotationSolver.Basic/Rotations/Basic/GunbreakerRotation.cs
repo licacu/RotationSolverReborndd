@@ -18,23 +18,53 @@ public partial class GunbreakerRotation
     /// </summary>
     public static byte AmmoComboStep => JobGauge.AmmoComboStep;
 
-    /// <summary>
-    /// Gets the maximum amount of ammo available.
-    /// </summary>
-    public static byte MaxAmmo()
-    {
-        return (byte)(CartridgeChargeIiTrait.EnoughLevel ? 3 : CartridgeChargeTrait.EnoughLevel ? 2 : 0);
-    }
+	/// <summary>
+	/// Gets the maximum amount of ammo available.
+	/// </summary>
+	public static byte MaxAmmo()
+	{
+		if (HasBloodfest)
+		{
+			if (CartridgeChargeIiTrait.EnoughLevel)
+				return 6;
+			return 4;
+		}
+		if (CartridgeChargeIiTrait.EnoughLevel)
+			return 3;
+		if (CartridgeChargeTrait.EnoughLevel)
+			return 2;
+		return 0;
+	}
 
-    /// <summary>
-    /// 
-    /// </summary>
-    public static bool IsAmmoCapped => CartridgeChargeIiTrait.EnoughLevel ? Ammo == 3 : CartridgeChargeTrait.EnoughLevel ? Ammo == 2 : Ammo == 0;
+	/// <summary>
+	/// Gets the maximum amount of ammo available not accounting for Bloodfest.
+	/// </summary>
+	public static byte NormalMaxAmmo()
+	{
+		if (CartridgeChargeIiTrait.EnoughLevel)
+			return 3;
+		if (CartridgeChargeTrait.EnoughLevel)
+			return 2;
+		return 0;
+	}
 
-    /// <summary>
-    /// Gets the max combo time of the Gnashing Fang combo.
-    /// </summary>
-    public static short MaxTimerDuration => JobGauge.MaxTimerDuration;
+	/// <summary>
+	/// 
+	/// </summary>
+	public static byte OvercappedAmmo()
+	{
+		return (byte)(Ammo - NormalMaxAmmo());
+	}
+
+	/// <summary>
+	/// Gets whether the current ammo is at the maximum allowed.
+	/// </summary>
+	public static bool IsAmmoCapped => Ammo == MaxAmmo();
+
+	/// <summary>
+	/// Gets the max combo time of the Gnashing Fang combo.
+	/// </summary>
+	public static short MaxTimerDuration => JobGauge.MaxTimerDuration;
 
     /// <summary>
     /// Gets whether the player is in the Gnashing Fang combo.
@@ -49,42 +79,47 @@ public partial class GunbreakerRotation
     /// <summary>
     /// Has No Mercy buff.
     /// </summary>
-    public static bool HasNoMercy => !Player.WillStatusEndGCD(0, 0, true, StatusID.NoMercy);
+    public static bool HasNoMercy => !StatusHelper.PlayerWillStatusEndGCD(0, 0, true, StatusID.NoMercy);
 
-    /// <summary>
-    /// Able to execute Sonic Break.
-    /// </summary>
-    public static bool HasReadyToBreak => !Player.WillStatusEndGCD(0, 0, true, StatusID.ReadyToBreak);
+	/// <summary>
+	/// Has No Mercy buff.
+	/// </summary>
+	public static bool HasBloodfest => !StatusHelper.PlayerWillStatusEndGCD(0, 0, true, StatusID.Bloodfest);
+
+	/// <summary>
+	/// Able to execute Sonic Break.
+	/// </summary>
+	public static bool HasReadyToBreak => !StatusHelper.PlayerWillStatusEndGCD(0, 0, true, StatusID.ReadyToBreak);
 
     /// <summary>
     /// Able to execute Reign of Beasts.
     /// </summary>
-    public static bool HasReadyToReign => !Player.WillStatusEndGCD(0, 0, true, StatusID.ReadyToReign);
+    public static bool HasReadyToReign => !StatusHelper.PlayerWillStatusEndGCD(0, 0, true, StatusID.ReadyToReign);
 
     /// <summary>
     /// Able to execute Jugular Rip.
     /// </summary>
-    public static bool HasReadyToRip => !Player.WillStatusEndGCD(0, 0, true, StatusID.ReadyToRip);
+    public static bool HasReadyToRip => !StatusHelper.PlayerWillStatusEndGCD(0, 0, true, StatusID.ReadyToRip);
 
     /// <summary>
     /// Able to execute Abdomen Tear.
     /// </summary>
-    public static bool HasReadyToTear => !Player.WillStatusEndGCD(0, 0, true, StatusID.ReadyToTear);
+    public static bool HasReadyToTear => !StatusHelper.PlayerWillStatusEndGCD(0, 0, true, StatusID.ReadyToTear);
 
     /// <summary>
     /// Able to execute Fated Brand.
     /// </summary>
-    public static bool HasReadyToRaze => !Player.WillStatusEndGCD(0, 0, true, StatusID.ReadyToRaze);
+    public static bool HasReadyToRaze => !StatusHelper.PlayerWillStatusEndGCD(0, 0, true, StatusID.ReadyToRaze);
 
     /// <summary>
     /// Able to execute Eye Gouge.
     /// </summary>
-    public static bool HasReadyToGouge => !Player.WillStatusEndGCD(0, 0, true, StatusID.ReadyToGouge);
+    public static bool HasReadyToGouge => !StatusHelper.PlayerWillStatusEndGCD(0, 0, true, StatusID.ReadyToGouge);
 
     /// <summary>
     /// Able to execute Hypervelocity.
     /// </summary>
-    public static bool HasReadyToBlast => !Player.WillStatusEndGCD(0, 0, true, StatusID.ReadyToBlast);
+    public static bool HasReadyToBlast => !StatusHelper.PlayerWillStatusEndGCD(0, 0, true, StatusID.ReadyToBlast);
 
     //public bool NoMercyWindow => NoMercyPvE.Cooldown.RecastTimeElapsed >= 39.5f && NoMercyPvE.Cooldown.RecastTimeElapsed <= 60;
 
@@ -327,7 +362,8 @@ public partial class GunbreakerRotation
     static partial void ModifyHeartOfStonePvE(ref ActionSetting setting)
     {
         setting.StatusProvide = [StatusID.HeartOfStone];
-        setting.IsFriendly = true;
+		setting.ActionCheck = () => ObjectHelper.IsPlayerInParty() || ObjectHelper.PlayerIsTargetOnSelf();
+		setting.IsFriendly = true;
     }
 
     static partial void ModifyContinuationPvE(ref ActionSetting setting)
@@ -366,7 +402,6 @@ public partial class GunbreakerRotation
     static partial void ModifyBloodfestPvE(ref ActionSetting setting)
     {
         setting.StatusProvide = [StatusID.ReadyToReign];
-        setting.ActionCheck = () => Ammo == 0;
     }
 
     static partial void ModifyBlastingZonePvE(ref ActionSetting setting)
@@ -377,7 +412,7 @@ public partial class GunbreakerRotation
     static partial void ModifyHeartOfCorundumPvE(ref ActionSetting setting)
     {
         setting.StatusProvide = [StatusID.CatharsisOfCorundum, StatusID.ClarityOfCorundum];
-        setting.ActionCheck = () => Player.IsParty() || Player.IsTargetOnSelf();
+        setting.ActionCheck = () => ObjectHelper.IsPlayerInParty() || ObjectHelper.PlayerIsTargetOnSelf();
         setting.IsFriendly = true;
     }
 
@@ -389,7 +424,7 @@ public partial class GunbreakerRotation
 
     static partial void ModifyDoubleDownPvE(ref ActionSetting setting)
     {
-        setting.ActionCheck = () => Ammo >= 1;
+        setting.ActionCheck = () => Ammo >= 2;
         setting.CreateConfig = () => new ActionConfig()
         {
             AoeCount = 1,
@@ -482,7 +517,7 @@ public partial class GunbreakerRotation
     /// <summary>
     /// 
     /// </summary>
-    public static bool HasTerminalTrigger => Player.HasStatus(true, StatusID.RelentlessRush);
+    public static bool HasTerminalTrigger => StatusHelper.PlayerHasStatus(true, StatusID.RelentlessRush);
 
     #region PvP Actions
 
@@ -573,13 +608,13 @@ public partial class GunbreakerRotation
     protected override bool EmergencyAbility(IAction nextGCD, out IAction? act)
     {
         return (SuperbolidePvE.CanUse(out act)
-            && Player.GetHealthRatio() <= Service.Config.HealthForDyingTanks) || base.EmergencyAbility(nextGCD, out act);
+            && Player?.GetHealthRatio() <= Service.Config.HealthForDyingTanks) || base.EmergencyAbility(nextGCD, out act);
     }
 
     /// <inheritdoc/>
     public override bool IsBursting()
     {
-        if (Player.HasStatus(true, StatusID.NoMercy) || NoMercyPvE.Cooldown.RecastTimeRemainOneCharge > 15f)
+        if (StatusHelper.PlayerHasStatus(true, StatusID.NoMercy) || NoMercyPvE.Cooldown.RecastTimeRemainOneCharge > 15f)
         {
             return true; // Either have No Mercy or more than 15 seconds until we can use it
         }

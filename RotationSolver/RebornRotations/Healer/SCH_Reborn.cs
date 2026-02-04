@@ -2,7 +2,7 @@ using System.ComponentModel;
 
 namespace RotationSolver.RebornRotations.Healer;
 
-[Rotation("Reborn", CombatType.PvE, GameVersion = "7.35")]
+[Rotation("Reborn", CombatType.PvE, GameVersion = "7.4")]
 [SourceCode(Path = "main/RebornRotations/Healer/SCH_Reborn.cs")]
 
 public sealed class SCH_Reborn : ScholarRotation
@@ -119,22 +119,22 @@ public sealed class SCH_Reborn : ScholarRotation
             return act;
         }
 
-        if (remainTime < 3 && UseBurstMedicine(out act))
+        if (remainTime < 3f && UseBurstMedicine(out act))
         {
             return act;
         }
 
-        if (remainTime is < 4 and > 3 && DeploymentTacticsPvE.CanUse(out act))
+        if (remainTime is < 4f and > 3f && DeploymentTacticsPvE.CanUse(out act))
         {
             return act;
         }
 
-        if (remainTime is < 7 and > 6 && AdloquiumDuringCountdown && AdloquiumPvE.CanUse(out act))
+        if (remainTime is < 7f and > 6f && AdloquiumDuringCountdown && AdloquiumPvE.CanUse(out act, targetOverride: TargetType.Tank))
         {
             return act;
         }
 
-        if (remainTime <= 15 && UseRecitationInOpener && RecitationPvE.CanUse(out act))
+        if (remainTime <= 15f && UseRecitationInOpener && RecitationPvE.CanUse(out act))
         {
             return act;
         }
@@ -282,21 +282,24 @@ public sealed class SCH_Reborn : ScholarRotation
             return true;
         }
 
-        // Check if any tank matches Excogitation target
-        bool tankHasExcogTarget = false;
-        IEnumerable<IBattleChara> tanks = PartyMembers.GetJobCategory(JobRole.Tank);
-        foreach (IBattleChara member in tanks)
-        {
-            if (member == ExcogitationPvE.Target.Target)
-            {
-                tankHasExcogTarget = true;
-                break;
-            }
-        }
-        if (HasRecitation && tankHasExcogTarget && ExcogitationPvE.CanUse(out act))
-        {
-            return true;
-        }
+		if (ExcogitationPvE.CanUse(out act))
+		{
+			// Check if any tank matches Excogitation target
+			bool tankHasExcogTarget = false;
+			IEnumerable<IBattleChara> tanks = PartyMembers.GetJobCategory(JobRole.Tank);
+			foreach (IBattleChara member in tanks)
+			{
+				if (member == ExcogitationPvE.Target.Target)
+				{
+					tankHasExcogTarget = true;
+					break;
+				}
+			}
+			if (HasRecitation && tankHasExcogTarget && ExcogitationPvE.Target.Target.GetHealthRatio() < ExcogHeal)
+			{
+				return true;
+			}
+		}
 
         // Check if any party member has Fey Union status
         bool haveLink = false;
@@ -318,7 +321,7 @@ public sealed class SCH_Reborn : ScholarRotation
         }
 
         // Otherwise we'll spend aether charges; we didn't burn it on the tank above so use excog based on oGCD heal toggle
-        if (ExcogitationPvE.Target.Target.GetHealthRatio() >= ExcogHeal && ExcogitationPvE.CanUse(out act))
+        if (!HasRecitation && !IsLastAbility(false, RecitationPvE) && ExcogitationPvE.CanUse(out act) && ExcogitationPvE.Target.Target.GetHealthRatio() < ExcogHeal)
         {
             return true;
         }
@@ -357,32 +360,44 @@ public sealed class SCH_Reborn : ScholarRotation
     [RotationDesc(ActionID.FeyIlluminationPvE, ActionID.ExpedientPvE, ActionID.SummonSeraphPvE, ActionID.ConsolationPvE, ActionID.SacredSoilPvE, ActionID.SeraphismPvE)]
     protected override bool DefenseAreaAbility(IAction nextGCD, out IAction? act)
     {
-        // Deployment Tactics is modified in the base rotation to only use if they have galvanize so can trust that targets are at least valid?
-        // The number of times that we adlo to heal a DPS and then would like to use this is actually reasonably high in dungeons
-        // TODO: This is typically skipping because the target it's trying to cast the area defense on isn't the galvanized target
-        if (DeploymentTacticsPvE.EnoughLevel && InCombat && (!RecitationPvE.EnoughLevel || RecitationPvE.Cooldown.IsCoolingDown))
-        {
-            if (DeploymentTacticsUsage == DeploymentTacticsUsageStrategy.CatalyzeOnly)
-            {
-                if (DeploymentTacticsPvE.CanUse(out act))
-                {
-                    if (DeploymentTacticsPvE.Target.Target.HasStatus(true, StatusID.Catalyze))
-                    {
-                        return true;
-                    }
-                }
-            }
-            else if (DeploymentTacticsUsage == DeploymentTacticsUsageStrategy.CatalyzeOrGalvanize)
-            {
-                if (DeploymentTacticsPvE.CanUse(out act))
-                {
-                    return true;
-                }
-            }
-        }
+		// Deployment Tactics is modified in the base rotation to only use if they have galvanize so can trust that targets are at least valid?
+		// The number of times that we adlo to heal a DPS and then would like to use this is actually reasonably high in dungeons
+		// TODO: This is typically skipping because the target it's trying to cast the area defense on isn't the galvanized target
+		if (DeploymentTacticsPvE.EnoughLevel && InCombat && (!RecitationPvE.EnoughLevel || RecitationPvE.Cooldown.IsCoolingDown))
+		{
+			if (DeploymentTacticsUsage == DeploymentTacticsUsageStrategy.CatalyzeOnly)
+			{
+				if (DeploymentTacticsPvE.CanUse(out act))
+				{
+					var target = DeploymentTacticsPvE.Target.Target;
+					// Avoid touching StatusList directly; HasStatus is safer but still guard it.
+					if (target != null)
+					{
+						try
+						{
+							if (target.HasStatus(true, StatusID.Catalyze))
+							{
+								return true;
+							}
+						}
+						catch
+						{
+							// Target may be invalid/disposed; ignore and continue.
+						}
+					}
+				}
+			}
+			else if (DeploymentTacticsUsage == DeploymentTacticsUsageStrategy.CatalyzeOrGalvanize)
+			{
+				if (DeploymentTacticsPvE.CanUse(out act))
+				{
+					return true;
+				}
+			}
+		}
 
-        // Consolation is great if Seraph is up
-        if (ConsolationPvE.CanUse(out act, usedUp: true))
+		// Consolation is great if Seraph is up
+		if (ConsolationPvE.CanUse(out act, usedUp: true))
         {
             return true;
         }
@@ -433,7 +448,7 @@ public sealed class SCH_Reborn : ScholarRotation
             return true;
         }
 
-        if (ExcogitationPvE.CanUse(out act))
+        if (!HasRecitation && !IsLastAbility(false, RecitationPvE) && ExcogitationPvE.CanUse(out act))
         {
             return true;
         }
@@ -467,7 +482,7 @@ public sealed class SCH_Reborn : ScholarRotation
         if (BanefulImpactionPvE.CanUse(out act) &&
             (closeTargetCount > 3 // Mobs are grouped up
             || Target.IsBossFromTTK() // Or it's a boss
-            || Player.WillStatusEndGCD(2, 0, true, StatusID.ImpactImminent))) // Or we'll lose the ability if we don't use it
+            || Player != null && StatusHelper.PlayerWillStatusEndGCD(2, 0, true, StatusID.ImpactImminent))) // Or we'll lose the ability if we don't use it
         {
             return true;
         }
@@ -516,7 +531,7 @@ public sealed class SCH_Reborn : ScholarRotation
     [RotationDesc(ActionID.SuccorPvE, ActionID.ConcitationPvE, ActionID.AccessionPvE)]
     protected override bool HealAreaGCD(out IAction? act)
     {
-        if (HasSwift && SwiftLogic && MergedStatus.HasFlag(AutoStatus.Raise))
+        if ((HasSwift || IsLastAction(ActionID.SwiftcastPvE)) && SwiftLogic && MergedStatus.HasFlag(AutoStatus.Raise))
         {
             return base.HealAreaGCD(out act);
         }
@@ -549,7 +564,7 @@ public sealed class SCH_Reborn : ScholarRotation
     [RotationDesc(ActionID.AdloquiumPvE, ActionID.ManifestationPvE, ActionID.PhysickPvE)]
     protected override bool HealSingleGCD(out IAction? act)
     {
-        if (HasSwift && SwiftLogic && MergedStatus.HasFlag(AutoStatus.Raise))
+        if ((HasSwift || IsLastAction(ActionID.SwiftcastPvE)) && SwiftLogic && MergedStatus.HasFlag(AutoStatus.Raise))
         {
             return base.HealSingleGCD(out act);
         }
@@ -575,7 +590,7 @@ public sealed class SCH_Reborn : ScholarRotation
     [RotationDesc(ActionID.SuccorPvE, ActionID.ConcitationPvE, ActionID.AccessionPvE)]
     protected override bool DefenseAreaGCD(out IAction? act)
     {
-        if (HasSwift && SwiftLogic && MergedStatus.HasFlag(AutoStatus.Raise))
+        if ((HasSwift || IsLastAction(ActionID.SwiftcastPvE)) && SwiftLogic && MergedStatus.HasFlag(AutoStatus.Raise))
         {
             return base.DefenseAreaGCD(out act);
         }
@@ -599,9 +614,20 @@ public sealed class SCH_Reborn : ScholarRotation
         return base.DefenseAreaGCD(out act);
     }
 
-    protected override bool GeneralGCD(out IAction? act)
+	[RotationDesc(ActionID.ResurrectionPvE)]
+	protected override bool RaiseGCD(out IAction? act)
+	{
+		if (ResurrectionPvE.CanUse(out act))
+		{
+			return true;
+		}
+
+		return base.RaiseGCD(out act);
+	}
+
+	protected override bool GeneralGCD(out IAction? act)
     {
-        if (HasSwift && SwiftLogic && MergedStatus.HasFlag(AutoStatus.Raise))
+        if ((HasSwift || IsLastAction(ActionID.SwiftcastPvE)) && SwiftLogic && MergedStatus.HasFlag(AutoStatus.Raise))
         {
             return base.GeneralGCD(out act);
         }
@@ -630,7 +656,7 @@ public sealed class SCH_Reborn : ScholarRotation
 
         // Expect that players do ~ 10% of healer hp as DPS and ballpark to ensure we're not wasting dots on something that's going to die immediately based on nobody hitting it
         // This is still wildly overestimating mob survival in some contexts but initial TTK estimates from RSR can be poor based on how far mobs were being kited
-        if (UseBallparkTTK)
+        if (Player != null && UseBallparkTTK)
         {
             expectedHPToLive12Seconds = BallparkPercent * Player.MaxHp * partyMemberCount * 12;
         }

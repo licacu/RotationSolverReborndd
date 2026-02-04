@@ -2,7 +2,7 @@
 
 namespace RotationSolver.RebornRotations.Magical;
 
-[Rotation("Reborn", CombatType.PvE, GameVersion = "7.35")]
+[Rotation("Reborn", CombatType.PvE, GameVersion = "7.4")]
 [SourceCode(Path = "main/RebornRotations/Magical/SMN_Reborn.cs")]
 
 public sealed class SMN_Reborn : SummonerRotation
@@ -23,7 +23,7 @@ public sealed class SMN_Reborn : SummonerRotation
     [RotationConfig(CombatType.PvE, Name = "Use GCDs to heal. (Ignored if there are no healers alive in party)")]
     public bool GCDHeal { get; set; } = false;
 
-    [RotationConfig(CombatType.PvE, Name = "Use Crimson Cyclone at any range, regardless of saftey use with caution (Enabling this ignores the below distance setting).")]
+	[RotationConfig(CombatType.PvE, Name = "Use Crimson Cyclone at any range, regardless of saftey use with caution (Enabling this ignores the below distance setting).")]
     public bool AddCrimsonCyclone { get; set; } = true;
 
     [Range(1, 20, ConfigUnitType.Yalms)]
@@ -36,7 +36,10 @@ public sealed class SMN_Reborn : SummonerRotation
     [RotationConfig(CombatType.PvE, Name = "Use Swiftcast on ressurection")]
     public bool AddSwiftcastOnRaise { get; set; } = true;
 
-    [RotationConfig(CombatType.PvE, Name = "Use Swiftcast on Ruby Ruin when not enough level for Ruby Rite")]
+	[RotationConfig(CombatType.PvE, Name = "Raise while in solar bahamut")]
+	public bool SBRaise { get; set; } = true;
+
+	[RotationConfig(CombatType.PvE, Name = "Use Swiftcast on Ruby Ruin when not enough level for Ruby Rite")]
     public bool AddSwiftcastOnLowST { get; set; } = true;
 
     [RotationConfig(CombatType.PvE, Name = "Use Swiftcast on Ruby Outburst when not enough level for Ruby Rite")]
@@ -51,10 +54,13 @@ public sealed class SMN_Reborn : SummonerRotation
     [RotationConfig(CombatType.PvE, Name = "Order")]
     public SummonOrderType SummonOrder { get; set; } = SummonOrderType.TopazEmeraldRuby;
 
-    [RotationConfig(CombatType.PvE, Name = "Use radiant on cooldown. But still keeping one charge")]
+    [RotationConfig(CombatType.PvE, Name = "Use second charge of Radiant Aegis on cooldown")]
     public bool RadiantOnCooldown { get; set; } = true;
 
-    [RotationConfig(CombatType.PvE, Name = "Use this if there's no other raid buff in your party")]
+	[RotationConfig(CombatType.PvE, Name = "Use Radiant Aegis on cooldown")]
+	public bool RadiantOnCooldownSpam { get; set; } = false;
+
+	[RotationConfig(CombatType.PvE, Name = "Use this if there's no other raid buff in your party")]
     public bool SecondTypeOpenerLogic { get; set; } = false;
 
     [RotationConfig(CombatType.PvE, Name = "Use Physick above level 30")]
@@ -122,7 +128,7 @@ public sealed class SMN_Reborn : SummonerRotation
     [RotationDesc(ActionID.LuxSolarisPvE)]
     protected override bool GeneralAbility(IAction nextGCD, out IAction? act)
     {
-        if (Player.WillStatusEndGCD(3, 0, true, StatusID.RefulgentLux))
+        if (StatusHelper.PlayerWillStatusEndGCD(3, 0, true, StatusID.RefulgentLux))
         {
             if (LuxSolarisPvE.CanUse(out act))
             {
@@ -130,7 +136,7 @@ public sealed class SMN_Reborn : SummonerRotation
             }
         }
 
-        if (Player.WillStatusEndGCD(2, 0, true, StatusID.FirebirdTrance))
+        if (StatusHelper.PlayerWillStatusEndGCD(2, 0, true, StatusID.FirebirdTrance))
         {
             if (RekindlePvE.CanUse(out act))
             {
@@ -138,7 +144,7 @@ public sealed class SMN_Reborn : SummonerRotation
             }
         }
 
-        if (Player.WillStatusEndGCD(3, 0, true, StatusID.FirebirdTrance))
+        if (StatusHelper.PlayerWillStatusEndGCD(3, 0, true, StatusID.FirebirdTrance))
         {
             if (RekindlePvE.CanUse(out act))
             {
@@ -154,7 +160,26 @@ public sealed class SMN_Reborn : SummonerRotation
             return true;
         }
 
-        return base.GeneralAbility(nextGCD, out act);
+		if (RadiantAegisPvE.Cooldown.CurrentCharges > 0 && !IsLastAction(false, RadiantAegisPvE) && InCombat)
+		{
+			if (RadiantOnCooldown && (RadiantAegisPvE.Cooldown.CurrentCharges == 2 || (RadiantAegisPvE.Cooldown.CurrentCharges == 1 && RadiantAegisPvE.Cooldown.WillHaveXChargesGCD(2, 1, 0))))
+			{
+				if (RadiantAegisPvE.CanUse(out act))
+				{
+					return true;
+				}
+			}
+
+			if (RadiantOnCooldownSpam)
+			{
+				if (RadiantAegisPvE.CanUse(out act))
+				{
+					return true;
+				}
+			}
+		}
+
+		return base.GeneralAbility(nextGCD, out act);
     }
 
     protected override bool AttackAbility(IAction nextGCD, out IAction? act)
@@ -382,7 +407,20 @@ public sealed class SMN_Reborn : SummonerRotation
         return base.HealSingleGCD(out act);
     }
 
-    protected override bool GeneralGCD(out IAction? act)
+	[RotationDesc(ActionID.ResurrectionPvE)]
+	protected override bool RaiseGCD(out IAction? act)
+	{
+		if ((!InSolarBahamut && SBRaise) || !SBRaise)
+		{
+			if (ResurrectionPvE.CanUse(out act))
+			{
+				return true;
+			}
+		}
+		return base.RaiseGCD(out act);
+	}
+
+	protected override bool GeneralGCD(out IAction? act)
     {
         if (SummonCarbunclePvE.CanUse(out act))
         {

@@ -1,15 +1,11 @@
 ﻿namespace RotationSolver.RebornRotations.PVPRotations.Melee;
 
-[Rotation("Default PVP", CombatType.PvP, GameVersion = "7.35")]
+[Rotation("Default PVP", CombatType.PvP, GameVersion = "7.4")]
 [SourceCode(Path = "main/RebornRotations/PVPRotations/Melee/RPR_Default.PvP.cs")]
 
 public sealed class RPR_DefaultPvP : ReaperRotation
 {
     #region Configurations
-
-    [RotationConfig(CombatType.PvP, Name = "Stop attacking while in Guard.")]
-    public bool RespectGuard { get; set; } = true;
-
     [Range(0, 1, ConfigUnitType.Percent)]
     [RotationConfig(CombatType.PvP, Name = "Player health threshold needed for Bloodbath use")]
     public float BloodBathPvPPercent { get; set; } = 0.75f;
@@ -22,19 +18,9 @@ public sealed class RPR_DefaultPvP : ReaperRotation
     #region oGCDs
     protected override bool EmergencyAbility(IAction nextGCD, out IAction? action)
     {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.EmergencyAbility(nextGCD, out action);
-        }
-
-        if (PurifyPvP.CanUse(out action))
-        {
-            return true;
-        }
-
         if (BloodbathPvP.CanUse(out action))
         {
-            if (Player.GetHealthRatio() < BloodBathPvPPercent)
+            if (Player?.GetHealthRatio() < BloodBathPvPPercent)
             {
                 return true;
             }
@@ -55,11 +41,6 @@ public sealed class RPR_DefaultPvP : ReaperRotation
 
     protected override bool DefenseSingleAbility(IAction nextGCD, out IAction? action)
     {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.DefenseSingleAbility(nextGCD, out action);
-        }
-
         if (ArcaneCrestPvP.CanUse(out action))
         {
             return true;
@@ -70,11 +51,6 @@ public sealed class RPR_DefaultPvP : ReaperRotation
 
     protected override bool AttackAbility(IAction nextGCD, out IAction? action)
     {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.AttackAbility(nextGCD, out action);
-        }
-
         if (HasEnshroudedPvP)
         {
             if (LemuresSlicePvP.CanUse(out action))
@@ -103,16 +79,11 @@ public sealed class RPR_DefaultPvP : ReaperRotation
     #region GCDs
     protected override bool GeneralGCD(out IAction? action)
     {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.GeneralGCD(out action);
-        }
-
         if (HasEnshroudedPvP)
         {
             if (CommunioPvP.CanUse(out action))
             {
-                if (Player.StatusStack(true, StatusID.Enshrouded_2863) == 1 || Player.WillStatusEndGCD(1, 0, true, StatusID.Enshrouded_2863))
+                if (StatusHelper.PlayerStatusStack(true, StatusID.Enshrouded_2863) == 1 || StatusHelper.PlayerWillStatusEndGCD(1, 0, true, StatusID.Enshrouded_2863))
                 {
                     return true;
                 }
@@ -138,7 +109,7 @@ public sealed class RPR_DefaultPvP : ReaperRotation
         {
             if (PlentifulHarvestPvP.CanUse(out action))
             {
-                if (Player.StatusStack(true, StatusID.ImmortalSacrifice_3204) > 3)
+                if (StatusHelper.PlayerStatusStack(true, StatusID.ImmortalSacrifice_3204) > 3)
                 {
                     return true;
                 }

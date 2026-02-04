@@ -1,6 +1,6 @@
 namespace RotationSolver.RebornRotations.Magical;
 
-[Rotation("Basic BLU", CombatType.PvE, GameVersion = "7.35")]
+[Rotation("Basic BLU", CombatType.PvE, GameVersion = "7.4")]
 [SourceCode(Path = "main/BasicRotations/Limited Jobs/BLU_Basic.cs")]
 
 public sealed class Blue_Basic : BlueMageRotation
@@ -94,7 +94,7 @@ public sealed class Blue_Basic : BlueMageRotation
 
     protected override bool GeneralAbility(IAction nextGCD, out IAction? act)
     {
-        if (Player.CurrentMp < 6000 && InCombat && LucidDreamingPvE.CanUse(out act))
+        if (Player?.CurrentMp < 6000 && InCombat && LucidDreamingPvE.CanUse(out act))
         {
             return true;
         }

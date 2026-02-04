@@ -1,6 +1,6 @@
 namespace RotationSolver.RebornRotations.Melee;
 
-[Rotation("Reborn", CombatType.PvE, GameVersion = "7.35")]
+[Rotation("Reborn", CombatType.PvE, GameVersion = "7.4")]
 [SourceCode(Path = "main/RebornRotations/Melee/NIN_Reborn.cs")]
 
 public sealed class NIN_Reborn : NinjaRotation
@@ -17,17 +17,17 @@ public sealed class NIN_Reborn : NinjaRotation
     [RotationConfig(CombatType.PvE, Name = "Use Mudras outside of combat when enemies are near")]
     public bool CombatMudra { get; set; } = true;
 
-    [RotationConfig(CombatType.PvE, Name = "Use both stacks of Mudras")]
+	[RotationConfig(CombatType.PvE, Name = "Use both stacks of Mudras")]
     public bool BurnMudraStacks { get; set; } = false;
 
     [RotationConfig(CombatType.PvE, Name = "Use Forked Raiju instead of Fleeting Raiju if you are outside of range (Dangerous)")]
     public bool ForkedUse { get; set; } = false;
-    #endregion
+	#endregion
 
-    #region Tracking Properties
-    // Properties to track RabbitMediumPvE failures and related information.
-    //private int _rabbitMediumFailures = GetActionUsageCount((uint)ActionID.RabbitMediumPvE);
-    private IBaseAction? _lastNinActionAim = null;
+	#region Tracking Properties
+	// Properties to track RabbitMediumPvE failures and related information.
+	//private int _rabbitMediumFailures = GetActionUsageCount((uint)ActionID.RabbitMediumPvE);
+	private IBaseAction? _lastNinActionAim = null;
     // Holds the next ninjutsu action to perform.
     private IBaseAction? _ninActionAim = null;
     private readonly ActionID NinjutsuPvEid = AdjustId(ActionID.NinjutsuPvE);
@@ -43,7 +43,7 @@ public sealed class NIN_Reborn : NinjaRotation
     private static bool GokaMekkyakuCurrent => AdjustId(ActionID.NinjutsuPvE) == ActionID.GokaMekkyakuPvE;
     private static bool HyoshoRanryuCurrent => AdjustId(ActionID.NinjutsuPvE) == ActionID.HyoshoRanryuPvE;
 
-    private bool KeepKassatsuinBurst => !Player.WillStatusEndGCD(2, 0, true, StatusID.Kassatsu) && HasKassatsu && !InTrickAttack && !IsExecutingMudra;
+    private bool KeepKassatsuinBurst => !StatusHelper.PlayerWillStatusEndGCD(2, 0, true, StatusID.Kassatsu) && HasKassatsu && !InTrickAttack && !IsExecutingMudra;
 
     public override void DisplayRotationStatus()
     {
@@ -123,7 +123,7 @@ public sealed class NIN_Reborn : NinjaRotation
         }
 
         // Side-effect: decide/refresh ninjutsu aim; do not consume the oGCD slot here.
-        if (InCombat || (CombatMudra && HasHostilesInMaxRange && TenPvE.Cooldown.CurrentCharges == TenPvE.Cooldown.MaxCharges))
+        if ((InCombat && HasHostilesInMaxRange) || (CombatMudra && HasHostilesInMaxRange && TenPvE.Cooldown.CurrentCharges == TenPvE.Cooldown.MaxCharges))
         {
             _ = ChoiceNinjutsu(out _);
         }
@@ -150,7 +150,7 @@ public sealed class NIN_Reborn : NinjaRotation
             return true;
         }
 
-        if ((!TenChiJinPvE.Cooldown.IsCoolingDown || Player.WillStatusEndGCD(2, 0, true, StatusID.ShadowWalker)) && TrickAttackPvE.Cooldown.IsCoolingDown && MeisuiPvE.CanUse(out act))
+        if ((!TenChiJinPvE.Cooldown.IsCoolingDown || StatusHelper.PlayerWillStatusEndGCD(2, 0, true, StatusID.ShadowWalker)) && TrickAttackPvE.Cooldown.IsCoolingDown && MeisuiPvE.CanUse(out act))
         {
             return true;
         }
@@ -226,7 +226,7 @@ public sealed class NIN_Reborn : NinjaRotation
 
         // If the player is within Trick Attack's effective window, and Ten Chi Jin hasn't recently been used,
         // then Ten Chi Jin is set as the next action to perform.
-        if (InTrickAttack && !Player.HasStatus(true, StatusID.ShadowWalker) && !TenPvE.Cooldown.ElapsedAfter(30) && TenChiJinPvE.CanUse(out act))
+        if (InTrickAttack && !StatusHelper.PlayerHasStatus(true, StatusID.ShadowWalker) && !TenPvE.Cooldown.ElapsedAfter(30) && TenChiJinPvE.CanUse(out act))
         {
             return true;
         }
@@ -330,7 +330,7 @@ public sealed class NIN_Reborn : NinjaRotation
         act = null;
 
         // Checks for Kassatsu status to prioritize high-impact Ninjutsu due to its buff.
-        if (Player.HasStatus(true, StatusID.Kassatsu))
+        if (HasKassatsu)
         {
             if ((DeathBlossomPvE.CanUse(out _) || HakkeMujinsatsuPvE.CanUse(out _)) && GokaMekkyakuPvE.EnoughLevel && !IsLastAction(false, GokaMekkyakuPvE) && GokaMekkyakuPvE.IsEnabled && ChiPvE.Info.IsQuestUnlocked())
             {
@@ -391,12 +391,12 @@ public sealed class NIN_Reborn : NinjaRotation
             //Single
             if (!DeathBlossomPvE.CanUse(out _) && !HakkeMujinsatsuPvE.CanUse(out _) && !ShadowWalkerNeeded)
             {
-                if (RaitonPvE.EnoughLevel && RaitonPvE.IsEnabled && ChiPvE.Info.IsQuestUnlocked() && (!Player.HasStatus(true, StatusID.RaijuReady) || (Player.HasStatus(true, StatusID.RaijuReady) && Player.StatusStack(true, StatusID.RaijuReady) < 3)))
+                if (RaitonPvE.EnoughLevel && RaitonPvE.IsEnabled && ChiPvE.Info.IsQuestUnlocked() && (!StatusHelper.PlayerHasStatus(true, StatusID.RaijuReady) || (StatusHelper.PlayerHasStatus(true, StatusID.RaijuReady) && StatusHelper.PlayerStatusStack(true, StatusID.RaijuReady) < 3)))
                 {
                     SetNinjutsu(RaitonPvE);
                 }
 
-                if (FumaShurikenPvE.EnoughLevel && FumaShurikenPvE.IsEnabled && TenPvE.Info.IsQuestUnlocked() && (!RaitonPvE.EnoughLevel || (Player.HasStatus(true, StatusID.RaijuReady) && Player.StatusStack(true, StatusID.RaijuReady) == 3)))
+                if (FumaShurikenPvE.EnoughLevel && FumaShurikenPvE.IsEnabled && TenPvE.Info.IsQuestUnlocked() && (!RaitonPvE.EnoughLevel || (StatusHelper.PlayerHasStatus(true, StatusID.RaijuReady) && StatusHelper.PlayerStatusStack(true, StatusID.RaijuReady) == 3)))
                 {
                     SetNinjutsu(FumaShurikenPvE);
                 }
@@ -490,7 +490,7 @@ public sealed class NIN_Reborn : NinjaRotation
     {
         act = null;
 
-        if ((!TrickAttackPvE.Cooldown.IsCoolingDown || TrickAttackPvE.Cooldown.WillHaveOneCharge(Player.StatusTime(true, StatusID.Kassatsu))) && !IsExecutingMudra)
+        if ((!TrickAttackPvE.Cooldown.IsCoolingDown || TrickAttackPvE.Cooldown.WillHaveOneCharge(StatusHelper.PlayerStatusTime(true, StatusID.Kassatsu))) && !IsExecutingMudra)
         {
             return false;
         }
@@ -536,7 +536,7 @@ public sealed class NIN_Reborn : NinjaRotation
     {
         act = null;
 
-        if ((!TrickAttackPvE.Cooldown.IsCoolingDown || TrickAttackPvE.Cooldown.WillHaveOneCharge(Player.StatusTime(true, StatusID.Kassatsu))) && !IsExecutingMudra)
+        if ((!TrickAttackPvE.Cooldown.IsCoolingDown || TrickAttackPvE.Cooldown.WillHaveOneCharge(StatusHelper.PlayerStatusTime(true, StatusID.Kassatsu))) && !IsExecutingMudra)
         {
             return false;
         }
@@ -921,7 +921,7 @@ public sealed class NIN_Reborn : NinjaRotation
     protected override bool GeneralGCD(out IAction? act)
     {
         if (!IsExecutingMudra && (InTrickAttack || InMug) && NoNinjutsu && !HasRaijuReady
-            && !Player.HasStatus(true, StatusID.TenChiJin)
+            && Player != null && !StatusHelper.PlayerHasStatus(true, StatusID.TenChiJin)
             && PhantomKamaitachiPvE.CanUse(out act))
         {
             return true;
@@ -1069,7 +1069,7 @@ public sealed class NIN_Reborn : NinjaRotation
             }
         }
 
-        if (AutoUnhide && IsHidden)
+        if (StateEnabled && AutoUnhide && IsHidden)
         {
             StatusHelper.StatusOff(StatusID.Hidden);
         }

@@ -1,29 +1,16 @@
 namespace RotationSolver.RebornRotations.PVPRotations.Ranged;
 
-[Rotation("Default PVP", CombatType.PvP, GameVersion = "7.35")]
+[Rotation("Default PVP", CombatType.PvP, GameVersion = "7.4")]
 [SourceCode(Path = "main/RebornRotations/PVPRotations/Ranged/MCH_Default.PvP.cs")]
 
 public sealed class MCH_DefaultPvP : MachinistRotation
 {
     #region Configurations
-
-    [RotationConfig(CombatType.PvP, Name = "Stop attacking while in Guard.")]
-    public bool RespectGuard { get; set; } = true;
     #endregion
 
     #region oGCDs
     protected override bool EmergencyAbility(IAction nextGCD, out IAction? action)
     {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.EmergencyAbility(nextGCD, out action);
-        }
-
-        if (PurifyPvP.CanUse(out action))
-        {
-            return true;
-        }
-
         if (InCombat && BraveryPvP.CanUse(out action))
         {
             return true;
@@ -37,23 +24,8 @@ public sealed class MCH_DefaultPvP : MachinistRotation
         return base.EmergencyAbility(nextGCD, out action);
     }
 
-    protected override bool DefenseSingleAbility(IAction nextGCD, out IAction? action)
-    {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.DefenseSingleAbility(nextGCD, out action);
-        }
-
-        return base.DefenseSingleAbility(nextGCD, out action);
-    }
-
     protected override bool AttackAbility(IAction nextGCD, out IAction? action)
     {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.AttackAbility(nextGCD, out action);
-        }
-
         if (AnalysisPvP.CanUse(out action, usedUp: true))
         {
             if (nextGCD.IsTheSameTo(false, ActionID.DrillPvP, ActionID.BioblasterPvP, ActionID.AirAnchorPvP, ActionID.ChainSawPvP))
@@ -64,7 +36,7 @@ public sealed class MCH_DefaultPvP : MachinistRotation
 
         if (WildfirePvP.CanUse(out action))
         {
-            if (Player.HasStatus(true, StatusID.Overheated_3149))
+            if (StatusHelper.PlayerHasStatus(true, StatusID.Overheated_3149))
             {
                 return true;
             }
@@ -88,11 +60,6 @@ public sealed class MCH_DefaultPvP : MachinistRotation
     #region GCDs
     protected override bool GeneralGCD(out IAction? action)
     {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.GeneralGCD(out action);
-        }
-
         if (FullMetalFieldPvP.CanUse(out action))
         {
             return true;
@@ -100,7 +67,7 @@ public sealed class MCH_DefaultPvP : MachinistRotation
 
         if (BlazingShotPvP.CanUse(out action))
         {
-            if (Player.HasStatus(true, StatusID.Overheated_3149) && !Player.HasStatus(true, StatusID.Analysis))
+            if (StatusHelper.PlayerHasStatus(true, StatusID.Overheated_3149) && !StatusHelper.PlayerHasStatus(true, StatusID.Analysis))
             {
                 return true;
             }
@@ -128,7 +95,7 @@ public sealed class MCH_DefaultPvP : MachinistRotation
 
         if (ScattergunPvP.CanUse(out action))
         {
-            if (!Player.HasStatus(true, StatusID.Overheated_3149))
+            if (!StatusHelper.PlayerHasStatus(true, StatusID.Overheated_3149))
             {
                 return true;
             }

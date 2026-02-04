@@ -1,6 +1,6 @@
 ﻿namespace RotationSolver.RebornRotations.Ranged;
 
-[Rotation("Reborn", CombatType.PvE, GameVersion = "7.35")]
+[Rotation("Reborn", CombatType.PvE, GameVersion = "7.4")]
 [SourceCode(Path = "main/RebornRotations/Ranged/MCH_Reborn.cs")]
 
 public sealed class MCH_Reborn : MachinistRotation
@@ -17,22 +17,40 @@ public sealed class MCH_Reborn : MachinistRotation
 
     [RotationConfig(CombatType.PvE, Name = "Restrict mitigations to not overlap")]
     private bool MitOverlap { get; set; } = false;
-    #endregion
 
-    #region Countdown logic
-    protected override IAction? CountDownAction(float remainTime)
+	[RotationConfig(CombatType.PvE, Name = "Use AirAnchor at 1 second remaining on countdown")]
+	private bool AirAnchorCountdown { get; set; } = false;
+	#endregion
+
+	#region Countdown logic
+	protected override IAction? CountDownAction(float remainTime)
     {
-        if (remainTime < 4.8f && ReassemblePvE.CanUse(out IAction? act))
+		if (AirAnchorCountdown && remainTime < 1f && AirAnchorPvE.EnoughLevel && AirAnchorPvE.CanUse(out IAction? act))
+		{
+			return act;
+		}
+
+		if (!AirAnchorCountdown && remainTime < 0.1f && AirAnchorPvE.EnoughLevel && AirAnchorPvE.CanUse(out act))
+		{
+			return act;
+		}
+
+		if (remainTime < 4.75f && ReassemblePvE.CanUse(out act))
         {
             return act;
         }
 
-        if (IsBurst && OpenerBurstMeds && remainTime <= 1f && UseBurstMedicine(out act))
+		if (AirAnchorCountdown && IsBurst && OpenerBurstMeds && remainTime <= 1.5f && UseBurstMedicine(out act))
+		{
+			return act;
+		}
+
+		if (!AirAnchorCountdown && IsBurst && OpenerBurstMeds && remainTime <= 1f && UseBurstMedicine(out act))
         {
             return act;
         }
 
-        return base.CountDownAction(remainTime);
+		return base.CountDownAction(remainTime);
     }
     #endregion
 
@@ -86,7 +104,7 @@ public sealed class MCH_Reborn : MachinistRotation
             return true;
         }
 
-        if (!MitOverlap || (MitOverlap && !Player.HasStatus(true, StatusID.Tactician_1951)))
+        if (!MitOverlap || (MitOverlap && !StatusHelper.PlayerHasStatus(true, StatusID.Tactician_1951)))
         {
             if (DismantlePvE.CanUse(out act))
             {
@@ -350,7 +368,7 @@ public sealed class MCH_Reborn : MachinistRotation
             return true;
         }
 
-        if (Player.WillStatusEnd(3, true, StatusID.FullMetalMachinist))
+        if (StatusHelper.PlayerWillStatusEnd(3, true, StatusID.FullMetalMachinist))
         {
             if (FullMetalFieldPvE.CanUse(out act))
             {
@@ -358,7 +376,7 @@ public sealed class MCH_Reborn : MachinistRotation
             }
         }
 
-        if (Player.WillStatusEnd(3, true, StatusID.ExcavatorReady))
+        if (StatusHelper.PlayerWillStatusEnd(3, true, StatusID.ExcavatorReady))
         {
             if (ExcavatorPvE.CanUse(out act))
             {
@@ -522,7 +540,7 @@ public sealed class MCH_Reborn : MachinistRotation
                 return true;
             }
 
-            if (RookAutoturretPvE.CanUse(out act, skipTTKCheck: true) && !AutomatonQueenPvE.EnoughLevel)
+            if (!AutomatonQueenPvE.EnoughLevel && RookAutoturretPvE.CanUse(out act, skipTTKCheck: true))
             {
                 return true;
             }
@@ -536,7 +554,7 @@ public sealed class MCH_Reborn : MachinistRotation
                 return true;
             }
 
-            if (RookAutoturretPvE.CanUse(out act, skipTTKCheck: true) && !AutomatonQueenPvE.EnoughLevel)
+            if (!AutomatonQueenPvE.EnoughLevel && RookAutoturretPvE.CanUse(out act, skipTTKCheck: true))
             {
                 return true;
             }
@@ -551,7 +569,7 @@ public sealed class MCH_Reborn : MachinistRotation
                 return true;
             }
 
-            if (RookAutoturretPvE.CanUse(out act, skipTTKCheck: true) && !AutomatonQueenPvE.EnoughLevel)
+            if (!AutomatonQueenPvE.EnoughLevel && RookAutoturretPvE.CanUse(out act, skipTTKCheck: true))
             {
                 return true;
             }

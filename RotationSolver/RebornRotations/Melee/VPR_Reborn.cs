@@ -1,6 +1,6 @@
 ﻿namespace RotationSolver.RebornRotations.Melee;
 
-[Rotation("Reborn", CombatType.PvE, GameVersion = "7.35")]
+[Rotation("Reborn", CombatType.PvE, GameVersion = "7.4")]
 [SourceCode(Path = "main/RebornRotations/Melee/VPR_Reborn.cs")]
 
 public sealed class VPR_Reborn : ViperRotation
@@ -314,7 +314,7 @@ public sealed class VPR_Reborn : ViperRotation
                 }
             }
 
-            if (MedicineUncoiledFury && Player.HasStatus(true, StatusID.Medicated) && !HasReadyToReawaken && NoAbilityReady)
+            if (MedicineUncoiledFury && StatusHelper.PlayerHasStatus(true, StatusID.Medicated) && !HasReadyToReawaken && NoAbilityReady)
             {
                 if (UncoiledFuryPvE.CanUse(out act, usedUp: true))
                 {
@@ -401,7 +401,7 @@ public sealed class VPR_Reborn : ViperRotation
             }
         }
 
-        if (LiveComboTime > GCDTime(3) && IsSwift)
+        if (LiveComboTime > GCDTime(3) && IsSwift && VicepitPvE.Cooldown.CurrentCharges > 0)
         {
             if (VicepitPvE.Cooldown.CurrentCharges == 1 && VicepitPvE.Cooldown.RecastTimeRemainOneCharge < 10)
             {

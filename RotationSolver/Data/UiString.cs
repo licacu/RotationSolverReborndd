@@ -55,7 +55,7 @@ namespace RotationSolver.Data
         [Description("This includes almost all information available in one combat frame, including the status of all party members, hostile target statuses, skill cooldowns, MP and HP of characters, character locations, hostile target casting status, combo state, combat duration, player level, etc.\n\nIt will then highlight the best action on the hotbar, or help you click it.")]
         ConfigWindow_About_Description,
 
-        [Description("This is designed for GENERAL COMBAT, not for Savage or Ultimate content. \n\nUse it carefully! While not designed specifically for Savage or Ultimate content RSR works fine in them, but it will not solve mechancis for you. Pay attention and use macros.")]
+        [Description("This is designed for GENERAL COMBAT, not for Savage or Ultimate content. \n\nUse it carefully! While not designed specifically for Savage or Ultimate content RSR works fine in them, but it will not solve mechanics for you. Pay attention and use macros.")]
         ConfigWindow_About_Warning,
 
         [Description("RSR has helped you by clicking actions {0:N0} times.")]
@@ -97,7 +97,7 @@ namespace RotationSolver.Data
         [Description("Causes the game to crash")]
         ConfigWindow_About_Compatibility_Crash,
 
-        [Description("Many thanks to our sponsors.")]
+        [Description("Many thanks to Ko-fi sponsors.")]
         ConfigWindow_About_ThanksToSupporters,
 
         [Description("Open Config Folder")]
@@ -460,7 +460,37 @@ namespace RotationSolver.Data
         [Description("Rotation is null. Please log in or switch jobs!")]
         ConfigWindow_Condition_RotationNullWarning,
 
-        [Description("Delay its transition to true")]
+		[Description("Ultimate")]
+		ConfigWindow_Duty_Ultimate,
+
+		[Description("Savage")]
+		ConfigWindow_Duty_Savage,
+
+		[Description("Chaotic Alliance Raid")]
+		ConfigWindow_Duty_ChaoticAlliance,
+
+		[Description("Extreme")]
+		ConfigWindow_Duty_Extreme,
+
+		[Description("Dungeon")]
+		ConfigWindow_Duty_Dungeon,
+
+		[Description("Deep Dungeon")]
+		ConfigWindow_Duty_DeepDungeon,
+
+		[Description("Variant Dungeon")]
+		ConfigWindow_Duty_VariantDungeon,
+
+		[Description("Alliance Raid")]
+		ConfigWindow_Duty_Alliance,
+
+		[Description("Field Ops")]
+		ConfigWindow_Duty_FieldOps,
+
+		[Description("PvP")]
+		ConfigWindow_Duty_PvP,
+
+		[Description("Delay its transition to true")]
         ActionSequencer_Delay_Description,
 
         [Description("Delay its transition")]
@@ -639,9 +669,6 @@ namespace RotationSolver.Data
 
         [Description("Recent Changes:")]
         WelcomeWindow_Changelog,
-
-        [Description("PvP-Specific Controls")]
-        ConfigWindow_Auto_PvPSpecific,
     }
 
     public static class EnumExtensions

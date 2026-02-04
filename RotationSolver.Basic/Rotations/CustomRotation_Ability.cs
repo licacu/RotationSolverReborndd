@@ -1,3 +1,5 @@
+using ECommons.DalamudServices;
+
 namespace RotationSolver.Basic.Rotations;
 
 public partial class CustomRotation
@@ -12,24 +14,34 @@ public partial class CustomRotation
     {
         act = DataCenter.CommandNextAction;
 
-        IBaseAction.ForceEnable = true;
+		if (Player == null)
+		{
+			return false;
+		}
+
+		IBaseAction.ForceEnable = true;
         if (act is IBaseAction a && a != null && !a.Info.IsRealGCD && a.CanUse(out _, usedUp: true, skipAoeCheck: true, skipStatusProvideCheck: true))
         {
             return true;
         }
         IBaseAction.ForceEnable = false;
 
-        if ((Service.Config.LagMitigation || Player.HasStatus(true, StatusID.Mudra)) && DataCenter.DefaultGCDRemain < 0.625f)
+        if (StatusHelper.PlayerHasStatus(true, StatusID.Mudra))
         {
             return false;
         }
 
-        if (act is IBaseItem i && i.CanUse(out _, true))
+		if (DataCenter.IsPvP && Service.Config.PvpGuardControl && HasPVPGuard)
+		{
+			return false;
+		}
+
+		if (act is IBaseItem i && i.CanUse(out _, true))
         {
             return true;
         }
 
-        if (!Service.Config.UseAbility || Player.TotalCastTime > 0 || (Player.HasStatus(false, StatusID.ShackledAbilities) && DataCenter.NumberOfPartyMembersInRangeOf(8) > 1))
+        if (!Service.Config.UseAbility || Player.TotalCastTime > 0 || (StatusHelper.PlayerHasStatus(false, StatusID.ShackledAbilities) && DataCenter.NumberOfPartyMembersInRangeOf(8) > 1))
         {
             act = null;
             return false;
@@ -47,7 +59,7 @@ public partial class CustomRotation
         JobRole role = DataCenter.Role;
 
         IBaseAction.TargetOverride = TargetType.Interrupt;
-        if (DataCenter.MergedStatus.HasFlag(AutoStatus.Interrupt) && !Player.HasStatus(true, StatusID.Mudra))
+        if (DataCenter.MergedStatus.HasFlag(AutoStatus.Interrupt) && !StatusHelper.PlayerHasStatus(true, StatusID.Mudra))
         {
             if (DataCenter.CurrentDutyRotation?.InterruptAbility(nextGCD, out act) == true)
             {
@@ -98,7 +110,7 @@ public partial class CustomRotation
         {
             IBaseAction.ShouldEndSpecial = true;
         }
-        if (DataCenter.MergedStatus.HasFlag(AutoStatus.AntiKnockback) && !Player.HasStatus(true, StatusID.Mudra))
+        if (DataCenter.MergedStatus.HasFlag(AutoStatus.AntiKnockback) && !StatusHelper.PlayerHasStatus(true, StatusID.Mudra))
         {
             if (DataCenter.CurrentDutyRotation?.AntiKnockbackAbility(nextGCD, out act) == true)
             {
@@ -115,7 +127,7 @@ public partial class CustomRotation
         {
             IBaseAction.ShouldEndSpecial = true;
         }
-        if (DataCenter.MergedStatus.HasFlag(AutoStatus.Positional) && !Player.HasStatus(true, StatusID.Mudra) && !Player.HasStatus(true, StatusID.TrueNorth) && TrueNorthPvE.Cooldown.CurrentCharges > 0 && !IsLastAbility(false, TrueNorthPvE) && TrueNorthPvE.CanUse(out act, skipComboCheck: true, usedUp: true))
+        if (DataCenter.MergedStatus.HasFlag(AutoStatus.Positional) && !StatusHelper.PlayerHasStatus(true, StatusID.Mudra) && !StatusHelper.PlayerHasStatus(true, StatusID.TrueNorth) && TrueNorthPvE.Cooldown.CurrentCharges > 0 && !IsLastAbility(false, TrueNorthPvE) && TrueNorthPvE.CanUse(out act, skipComboCheck: true, usedUp: true))
         {
             return true;
         }
@@ -131,7 +143,7 @@ public partial class CustomRotation
             {
                 return true;
             }
-            if (!Player.HasStatus(false, StatusID.Scalebound) && (!Player.HasStatus(false, StatusID.ShackledHealing) || Player.HasStatus(false, StatusID.ShackledHealing) && DataCenter.NumberOfPartyMembersInRangeOf(21) == 1))
+            if (!StatusHelper.PlayerHasStatus(false, StatusID.Scalebound) && (!StatusHelper.PlayerHasStatus(false, StatusID.ShackledHealing) || StatusHelper.PlayerHasStatus(false, StatusID.ShackledHealing) && DataCenter.NumberOfPartyMembersInRangeOf(21) == 1))
             {
                 if (HealAreaAbility(nextGCD, out act))
                 {
@@ -149,7 +161,7 @@ public partial class CustomRotation
             {
                 return true;
             }
-            if (!Player.HasStatus(false, StatusID.Scalebound) && (!Player.HasStatus(false, StatusID.ShackledHealing) || Player.HasStatus(false, StatusID.ShackledHealing) && DataCenter.NumberOfPartyMembersInRangeOf(21) == 1))
+            if (!StatusHelper.PlayerHasStatus(false, StatusID.Scalebound) && (!StatusHelper.PlayerHasStatus(false, StatusID.ShackledHealing) || StatusHelper.PlayerHasStatus(false, StatusID.ShackledHealing) && DataCenter.NumberOfPartyMembersInRangeOf(21) == 1))
             {
                 if (HealAreaAbility(nextGCD, out act))
                 {
@@ -167,7 +179,7 @@ public partial class CustomRotation
             {
                 return true;
             }
-            if (!Player.HasStatus(false, StatusID.Scalebound) && (!Player.HasStatus(false, StatusID.ShackledHealing) || Player.HasStatus(false, StatusID.ShackledHealing) && DataCenter.NumberOfPartyMembersInRangeOf(21) == 1))
+            if (!StatusHelper.PlayerHasStatus(false, StatusID.Scalebound) && (!StatusHelper.PlayerHasStatus(false, StatusID.ShackledHealing) || StatusHelper.PlayerHasStatus(false, StatusID.ShackledHealing) && DataCenter.NumberOfPartyMembersInRangeOf(21) == 1))
             {
                 if (HealSingleAbility(nextGCD, out act))
                 {
@@ -185,7 +197,7 @@ public partial class CustomRotation
             {
                 return true;
             }
-            if (!Player.HasStatus(false, StatusID.Scalebound) && (!Player.HasStatus(false, StatusID.ShackledHealing) || Player.HasStatus(false, StatusID.ShackledHealing) && DataCenter.NumberOfPartyMembersInRangeOf(21) == 1))
+            if (!StatusHelper.PlayerHasStatus(false, StatusID.Scalebound) && (!StatusHelper.PlayerHasStatus(false, StatusID.ShackledHealing) || StatusHelper.PlayerHasStatus(false, StatusID.ShackledHealing) && DataCenter.NumberOfPartyMembersInRangeOf(21) == 1))
             {
                 if (HealSingleAbility(nextGCD, out act))
                 {
@@ -262,7 +274,8 @@ public partial class CustomRotation
             {
                 return true;
             }
-            if (DefenseSingleAbility(nextGCD, out act) || (!DataCenter.IsHostileCastingToTank && ArmsLengthPvE.CanUse(out act)))
+            if (DefenseSingleAbility(nextGCD, out act) 
+                || (!DataCenter.IsHostileCastingToTank && !StatusHelper.PlayerHasStatus(true, StatusID.Vengeance) && !StatusHelper.PlayerHasStatus(true, StatusID.Damnation) && ArmsLengthPvE.CanUse(out act)))
             {
                 return true;
             }
@@ -276,7 +289,7 @@ public partial class CustomRotation
             IBaseAction.ShouldEndSpecial = true;
         }
         IBaseAction.AllEmpty = true;
-        if (DataCenter.MergedStatus.HasFlag(AutoStatus.MoveForward) && Player != null && !Player.HasStatus(true, StatusID.Bind))
+        if (DataCenter.MergedStatus.HasFlag(AutoStatus.MoveForward) && Player != null && !StatusHelper.PlayerHasStatus(true, StatusID.Bind))
         {
             if (DataCenter.CurrentDutyRotation?.MoveForwardAbility(nextGCD, out act) == true)
             {
@@ -358,7 +371,7 @@ public partial class CustomRotation
                 break;
 
             case JobRole.Melee:
-                if (LegSweepPvE.CanUse(out act) && !Player.HasStatus(true, StatusID.Mudra))
+                if (LegSweepPvE.CanUse(out act) && !StatusHelper.PlayerHasStatus(true, StatusID.Mudra))
                 {
                     return true;
                 }
@@ -416,14 +429,14 @@ public partial class CustomRotation
         switch (role)
         {
             case JobRole.Tank:
-                if (ArmsLengthPvE.CanUse(out act) && !Player.HasStatus(true, StatusID.InnerStrength))
+                if (ArmsLengthPvE.CanUse(out act) && !StatusHelper.PlayerHasStatus(true, StatusID.InnerStrength))
                 {
                     return true;
                 }
 
                 break;
             case JobRole.Melee:
-                if (ArmsLengthPvE.CanUse(out act) && !Player.HasStatus(true, StatusID.Mudra))
+                if (ArmsLengthPvE.CanUse(out act) && !StatusHelper.PlayerHasStatus(true, StatusID.Mudra))
                 {
                     return true;
                 }
@@ -499,12 +512,12 @@ public partial class CustomRotation
                 break;
 
             case JobRole.Melee:
-                if (SecondWindPvE.CanUse(out act) && !Player.HasStatus(true, StatusID.Mudra))
+                if (SecondWindPvE.CanUse(out act) && !StatusHelper.PlayerHasStatus(true, StatusID.Mudra))
                 {
                     return true;
                 }
 
-                if (BloodbathPvE.CanUse(out act) && !Player.HasStatus(true, StatusID.Mudra))
+                if (BloodbathPvE.CanUse(out act) && !StatusHelper.PlayerHasStatus(true, StatusID.Mudra))
                 {
                     return true;
                 }
@@ -549,7 +562,32 @@ public partial class CustomRotation
     /// <returns>True if the emergency ability can be used; otherwise, false.</returns>
     protected virtual bool EmergencyAbility(IAction nextGCD, out IAction? act)
     {
-        if (nextGCD is BaseAction action)
+		#region PvP
+		if (DataCenter.IsPvP)
+		{
+			if (PurifyPvP.CanUse(out act))
+			{
+				return true;
+			}
+
+			if (GuardPvP.CanUse(out act) && Player?.GetHealthRatio() <= Service.Config.HealthForGuard && !StatusHelper.PlayerHasStatus(true, StatusID.UndeadRedemption) && !StatusHelper.PlayerHasStatus(true, StatusID.InnerRelease_1303))
+			{
+				return true;
+			}
+
+			if (RecuperatePvP.CanUse(out act))
+			{
+				return true;
+			}
+
+			if (StandardissueElixirPvP.CanUse(out act))
+			{
+				return true;
+			}
+		}
+		#endregion
+
+		if (nextGCD is BaseAction action)
         {
             if (Role is JobRole.RangedMagical &&
                 action.Info.CastTime >= 5 && IActionHelper.IsLastActionGCD() && SwiftcastPvE.CanUse(out act))
@@ -573,18 +611,6 @@ public partial class CustomRotation
                 return true;
             }
         }
-
-        #region PvP
-        if (GuardPvP.CanUse(out act) && Player.GetHealthRatio() <= Service.Config.HealthForGuard && !Player.HasStatus(true, StatusID.UndeadRedemption) && !Player.HasStatus(true, StatusID.InnerRelease_1303))
-        {
-            return true;
-        }
-
-        if (DataCenter.IsPvP && RecuperatePvP.CanUse(out act) && !Player.HasStatus(true, StatusID.Guard))
-        {
-            return true;
-        }
-        #endregion
 
         act = null;
         return false;
@@ -694,7 +720,7 @@ public partial class CustomRotation
             return true;
         }
 
-        if (DataCenter.IsPvP && !DataCenter.InCombat && SprintPvP.CanUse(out act))
+        if (DataCenter.IsPvP && (!DataCenter.InCombat || (Service.Config.PvpAllowSprintWithoutTarget&& Svc.Targets.Target == null)) && SprintPvP.CanUse(out act))
         {
             return true;
         }
@@ -713,7 +739,6 @@ public partial class CustomRotation
     {
         if (DataCenter.MergedStatus.HasFlag(AutoStatus.NoCasting))
         {
-            act = null;
         }
 
         act = null;
@@ -730,7 +755,6 @@ public partial class CustomRotation
     {
         if (DataCenter.MergedStatus.HasFlag(AutoStatus.NoCasting))
         {
-            act = null;
         }
 
         act = null;

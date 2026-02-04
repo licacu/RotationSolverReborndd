@@ -1,6 +1,6 @@
 ﻿namespace RotationSolver.RebornRotations.PVPRotations.Ranged;
 
-[Rotation("Default PVP", CombatType.PvP, GameVersion = "7.35")]
+[Rotation("Default PVP", CombatType.PvP, GameVersion = "7.4")]
 [SourceCode(Path = "main/RebornRotations/PVPRotations/Ranged/BRD_Default.PvP.cs")]
 
 public sealed class BRD_DefaultPvP : BardRotation
@@ -9,37 +9,21 @@ public sealed class BRD_DefaultPvP : BardRotation
 
     [RotationConfig(CombatType.PvP, Name = "Use Warden's Paean on other players")]
     public bool BRDEsuna2 { get; set; } = false;
-
-    [RotationConfig(CombatType.PvP, Name = "Stop attacking while in Guard.")]
-    public bool RespectGuard { get; set; } = true;
     #endregion
 
     #region oGCDs
     protected override bool EmergencyAbility(IAction nextGCD, out IAction? action)
     {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.EmergencyAbility(nextGCD, out action);
-        }
-
         if (BRDEsuna2 && TheWardensPaeanPvP.CanUse(out action))
         {
             return true;
         }
-        if (Player.HasStatus(false, StatusHelper.PurifyPvPStatuses))
+        if (StatusHelper.PlayerHasStatus(false, StatusHelper.PurifyPvPStatuses))
         {
-            if (TheWardensPaeanPvP.CanUse(out action))
+            if (TheWardensPaeanPvP.CanUse(out action, targetOverride: TargetType.Self))
             {
-                if (TheWardensPaeanPvP.Target.Target == Player)
-                {
-                    return true;
-                }
-            }
-        }
-
-        if (PurifyPvP.CanUse(out action))
-        {
-            return true;
+				return true;
+			}
         }
 
         if (BraveryPvP.CanUse(out action))
@@ -63,14 +47,9 @@ public sealed class BRD_DefaultPvP : BardRotation
 
     protected override bool AttackAbility(IAction nextGCD, out IAction? action)
     {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.AttackAbility(nextGCD, out action);
-        }
-
         if (RepellingShotPvP.CanUse(out action))
         {
-            if (!Player.HasStatus(true, StatusID.Repertoire))
+            if (!StatusHelper.PlayerHasStatus(true, StatusID.Repertoire))
             {
                 return true;
             }
@@ -78,7 +57,7 @@ public sealed class BRD_DefaultPvP : BardRotation
 
         if (SilentNocturnePvP.CanUse(out action))
         {
-            if (!Player.HasStatus(true, StatusID.Repertoire))
+            if (!StatusHelper.PlayerHasStatus(true, StatusID.Repertoire))
             {
                 return true;
             }
@@ -101,11 +80,6 @@ public sealed class BRD_DefaultPvP : BardRotation
     #region GCDs
     protected override bool GeneralGCD(out IAction? action)
     {
-        if (RespectGuard && Player.HasStatus(true, StatusID.Guard))
-        {
-            return base.GeneralGCD(out action);
-        }
-
         if (HarmonicArrowPvP.CanUse(out action))
         {
             return true;

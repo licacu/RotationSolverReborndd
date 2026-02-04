@@ -1,6 +1,6 @@
 ﻿namespace RotationSolver.RebornRotations.Magical;
 
-[Rotation("Reborn", CombatType.PvE, GameVersion = "7.35")]
+[Rotation("Reborn", CombatType.PvE, GameVersion = "7.4")]
 [SourceCode(Path = "main/RebornRotations/Magical/PCT_Reborn.cs")]
 
 public sealed class PCT_Reborn : PictomancerRotation
@@ -33,7 +33,7 @@ public sealed class PCT_Reborn : PictomancerRotation
 
     #endregion
 
-    private static bool InBurstStatus => Player.HasStatus(true, StatusID.StarryMuse);
+    private static bool InBurstStatus => StatusHelper.PlayerHasStatus(true, StatusID.StarryMuse);
 
     #region Countdown logic
     // Defines logic for actions to take during the countdown before combat starts.
@@ -215,7 +215,7 @@ public sealed class PCT_Reborn : PictomancerRotation
 
     protected override bool GeneralAbility(IAction nextGCD, out IAction? act)
     {
-        if ((MergedStatus.HasFlag(AutoStatus.DefenseArea) || Player.WillStatusEndGCD(2, 0, true, StatusID.TemperaCoat)) && TemperaGrassaPvE.CanUse(out act))
+        if ((MergedStatus.HasFlag(AutoStatus.DefenseArea) || StatusHelper.PlayerWillStatusEndGCD(2, 0, true, StatusID.TemperaCoat)) && TemperaGrassaPvE.CanUse(out act))
         {
             return true;
         }
@@ -267,7 +267,7 @@ public sealed class PCT_Reborn : PictomancerRotation
             return true;
         }
 
-        if (Player.HasStatus(true, StatusID.StarryMuse))
+        if (HasStarryMuse)
         {
             if (CometInBlackPvE.CanUse(out act, skipCastingCheck: true))
             {
@@ -321,7 +321,7 @@ public sealed class PCT_Reborn : PictomancerRotation
                 return true;
             }
 
-            if (StarrySkyMotifPvE.CanUse(out act) && !Player.HasStatus(true, StatusID.Hyperphantasia))
+            if (StarrySkyMotifPvE.CanUse(out act) && !StatusHelper.PlayerHasStatus(true, StatusID.Hyperphantasia))
             {
                 return true;
             }

@@ -25,16 +25,20 @@ public class ActionTimelineManager : IDisposable
     private DateTime _lastTime = DateTime.MinValue;
     private DateTime? _combatStartTime = null;
     private bool _wasInCombat = false;
-    
-    private delegate void OnActorControlDelegate(uint entityId, uint type, uint buffID, uint direct, uint actionId, uint sourceId, uint arg4, uint arg5, ulong targetId, byte a10);  
-    [Signature("E8 ?? ?? ?? ?? 0F B7 0B 83 E9 64", DetourName = nameof(OnActorControl))]
-    private readonly Hook<OnActorControlDelegate>? _onActorControlHook = null;
 
-    private delegate void OnCastDelegate(uint sourceId, IntPtr sourceCharacter);
-    [Signature("40 53 57 48 81 EC ?? ?? ?? ?? 48 8B FA 8B D1", DetourName = nameof(OnCast))]
-    private readonly Hook<OnCastDelegate>? _onCastHook = null;
+	private delegate void OnActorControlDelegate(uint entityId, uint type, uint buffID, uint direct, uint actionId, uint sourceId, uint arg7, uint arg8, uint arg9, uint arg10, ulong targetId, byte arg12);
+	[Signature("E8 ?? ?? ?? ?? 0F B7 0B 83 E9 64", DetourName = nameof(OnActorControl))]
+#pragma warning disable CS0649
+	private readonly Hook<OnActorControlDelegate>? _onActorControlHook;
+#pragma warning restore CS0649
 
-    public DateTime EndTime { get; private set; } = DateTime.Now;
+	private delegate void OnCastDelegate(uint sourceId, IntPtr sourceCharacter);
+	[Signature("40 53 57 48 81 EC ?? ?? ?? ?? 48 8B FA 8B D1", DetourName = nameof(OnCast))]
+#pragma warning disable CS0649
+	private readonly Hook<OnCastDelegate>? _onCastHook;
+#pragma warning restore CS0649
+
+	public DateTime EndTime { get; private set; } = DateTime.Now;
 
     private ActionTimelineManager()
     {
@@ -71,32 +75,21 @@ public class ActionTimelineManager : IDisposable
         }
     }
 
-    private static TimelineItemType GetActionType(uint actionId, ActionType type)
-    {
-        switch (type)
-        {
-            case ActionType.Action:
-                if (Svc.Data.GetExcelSheet<Action>()?.TryGetRow(actionId, out var action) != true)
-                    break;
+	private static TimelineItemType GetActionType(uint actionId, ActionType type)
+	{
+		if (Svc.Data.GetExcelSheet<Action>()?.TryGetRow(actionId, out var action) != true)
+			return TimelineItemType.OGCD; // Default or fallback type
 
-                if (actionId == 3) return TimelineItemType.OGCD; // Sprint
+		if (actionId == 3) return TimelineItemType.OGCD; // Sprint
 
-                var isRealGcd = action.CooldownGroup == GCDCooldownGroup || action.AdditionalCooldownGroup == GCDCooldownGroup;
-                return action.ActionCategory.Value.RowId == 1 // AutoAttack
-                    ? TimelineItemType.AutoAttack
-                    : !isRealGcd && action.ActionCategory.Value.RowId == 4 ? TimelineItemType.OGCD // Ability
-                    : TimelineItemType.GCD;
+		var isRealGcd = action.CooldownGroup == GCDCooldownGroup || action.AdditionalCooldownGroup == GCDCooldownGroup;
+		return action.ActionCategory.Value.RowId == 1 // AutoAttack
+			? TimelineItemType.AutoAttack
+			: !isRealGcd && action.ActionCategory.Value.RowId == 4 ? TimelineItemType.OGCD // Ability
+			: TimelineItemType.GCD;
+	}
 
-            case ActionType.Item:
-                if (Svc.Data.GetExcelSheet<Item>()?.TryGetRow(actionId, out var item) != true)
-                    break;
-                return item.CastTimeSeconds > 0 ? TimelineItemType.GCD : TimelineItemType.OGCD;
-        }
-
-        return TimelineItemType.GCD;
-    }
-
-    private void AddItem(TimelineItem item)
+	private void AddItem(TimelineItem item)
     {
         if (item == null) return;
         if (_items.Count >= 2048)
@@ -181,11 +174,11 @@ public class ActionTimelineManager : IDisposable
         _lastItem.CastingTime = MathF.Min(maxTime, _lastItem.CastingTime);
     }
 
-    private void OnActorControl(uint entityId, uint type, uint buffID, uint direct, uint actionId, uint sourceId, uint arg4, uint arg5, ulong targetId, byte a10)
-    {
-        _onActorControlHook?.Original(entityId, type, buffID, direct, actionId, sourceId, arg4, arg5, targetId, a10);
+	private void OnActorControl(uint entityId, uint type, uint buffID, uint direct, uint actionId, uint sourceId, uint arg7, uint arg8, uint arg9, uint arg10, ulong targetId, byte arg12)
+	{
+		_onActorControlHook?.Original(entityId, type, buffID, direct, actionId, sourceId, arg7, arg8, arg9, arg10, targetId, arg12);
 
-        try
+		try
         {
             if (Player.Object == null || entityId != Player.Object.GameObjectId) return;
 
@@ -259,21 +252,21 @@ public class ActionTimelineManager : IDisposable
             if (items[i].EndTime > endTime) endTime = items[i].EndTime;
         }
 
-        // Fill session info
-        session.SessionInfo = new SessionInfo
-        {
-            StartTime = startTime,
-            EndTime = endTime,
-            DurationSeconds = (endTime - startTime).TotalSeconds,
-            PlayerName = Player.Available ? Player.Object.Name.TextValue : "Unknown",
-            PlayerJob = Player.Available ? Player.Job.ToString() : "Unknown",
-            Territory = DataCenter.Territory?.Name ?? "Unknown",
-            Duty = DataCenter.Territory?.ContentFinderName ?? "Unknown",
-            ExportedAt = DateTime.Now
-        };
+		// Fill session info
+		session.SessionInfo = new SessionInfo
+		{
+			StartTime = startTime,
+			EndTime = endTime,
+			DurationSeconds = (endTime - startTime).TotalSeconds,
+			PlayerName = Player.Available && Player.Object != null ? Player.Object.Name.TextValue : "Unknown",
+			PlayerJob = Player.Available ? Player.Job.ToString() : "Unknown",
+			Territory = DataCenter.Territory?.Name ?? "Unknown",
+			Duty = DataCenter.Territory?.ContentFinderName ?? "Unknown",
+			ExportedAt = DateTime.Now
+		};
 
-        // Convert timeline items to export format
-        Array.Sort(items, (a, b) => a.StartTime.CompareTo(b.StartTime));
+		// Convert timeline items to export format
+		Array.Sort(items, (a, b) => a.StartTime.CompareTo(b.StartTime));
         foreach (var item in items)
         {
             var exportedAction = new ExportedAction

@@ -1,6 +1,6 @@
 ﻿namespace RotationSolver.RebornRotations.Melee;
 
-[Rotation("Reborn", CombatType.PvE, GameVersion = "7.35")]
+[Rotation("Reborn", CombatType.PvE, GameVersion = "7.4")]
 [SourceCode(Path = "main/RebornRotations/Melee/RPR_Reborn.cs")]
 
 public sealed class RPR_Reborn : ReaperRotation
@@ -117,7 +117,7 @@ public sealed class RPR_Reborn : ReaperRotation
             }
         }
 
-        if ((PlentifulHarvestPvE.EnoughLevel && !HasPerfectioParata && !HasImmortalSacrifice) /*&& !Player.HasStatus(true, StatusID.BloodsownCircle_2972) */|| !PlentifulHarvestPvE.EnoughLevel)
+        if ((PlentifulHarvestPvE.EnoughLevel && !HasPerfectioParata && !HasImmortalSacrifice) /*&& !StatusHelper.PlayerHasStatus(true, StatusID.BloodsownCircle_2972) */|| !PlentifulHarvestPvE.EnoughLevel)
         {
             if (GluttonyPvE.CanUse(out act, skipAoeCheck: true))
             {

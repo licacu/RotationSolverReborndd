@@ -29,41 +29,6 @@ public static class Watcher
     public static string ShowStrSelf { get; private set; } = string.Empty;
     public static string ShowStrEnemy { get; private set; } = string.Empty;
 
-    private static string? _cachedBranch = null;
-
-    public static string DalamudBranch()
-    {
-        if (_cachedBranch != null)
-            return _cachedBranch;
-
-        const string release = "release";
-        string result = release; // Default to "release" instead of "other"
-
-        if (DalamudReflector.TryGetDalamudStartInfo(out Dalamud.Common.DalamudStartInfo? startinfo, Svc.PluginInterface))
-        {
-            if (!string.IsNullOrEmpty(startinfo?.ConfigurationPath) && File.Exists(startinfo.ConfigurationPath))
-            {
-                try
-                {
-                    using var fs = File.OpenRead(startinfo.ConfigurationPath);
-                    using var doc = System.Text.Json.JsonDocument.Parse(fs);
-                    if (doc.RootElement.TryGetProperty("DalamudBetaKind", out var kindProp))
-                    {
-                        string? type = kindProp.GetString();
-                        result = string.IsNullOrEmpty(type) ? release : type;
-                    }
-                }
-                catch
-                {
-                    result = release;
-                }
-            }
-        }
-
-        _cachedBranch = result;
-        return result;
-    }
-
     private static void ActionFromEnemy(ActionEffectSet set)
     {
         try
@@ -71,7 +36,7 @@ public static class Watcher
             if (set.Source is not IBattleChara battle || !set.Source.IsEnemy())
                 return;
 
-            IPlayerCharacter playerObject = Player.Object;
+            IPlayerCharacter? playerObject = Player.Object;
             if (playerObject == null)
                 return;
 
@@ -184,46 +149,56 @@ public static class Watcher
         }
     }
 
-    private static void ActionFromSelf(ActionEffectSet set)
-    {
-        try
-        {
-            IPlayerCharacter playerObject = Player.Object;
-            if (set.Source == null || playerObject == null)
-            {
-                return;
-            }
+	private static void ActionFromSelf(ActionEffectSet set)
+	{
+		try
+		{
+			//PluginLog.Debug($"ActionFromSelf invoked. Source: {set.Source?.GameObjectId}, Action: {set.Action?.Name.ExtractText() ?? "null"}");
 
-            if (set.Source.GameObjectId != playerObject.GameObjectId)
-            {
-                return;
-            }
+			IPlayerCharacter? playerObject = Player.Object;
+			if (set.Source == null || playerObject == null)
+			{
+				//PluginLog.Debug("ActionFromSelf: Source or playerObject is null. Exiting.");
+				return;
+			}
 
-            if (set.Header.ActionType is not ActionType.Action and not ActionType.Item)
-            {
-                return;
-            }
+			if (set.Source.GameObjectId != playerObject.GameObjectId)
+			{
+				//PluginLog.Debug($"ActionFromSelf: Source.GameObjectId ({set.Source.GameObjectId}) does not match playerObject.GameObjectId ({playerObject.GameObjectId}). Exiting.");
+				return;
+			}
 
-            if (set.Action == null)
-            {
-                return;
-            }
+			// TODO: Review if we need this check
+			//if (set.Header.ActionType is not ActionType.Action and not ActionType.Item)
+			//{
+			//	PluginLog.Debug($"ActionFromSelf: ActionType is {set.Header.ActionType}, not Action or Item. Exiting.");
+			//	return;
+			//}
 
-            if (set.Action?.ActionCategory.Value.RowId == (uint)ActionCate.Autoattack)
-            {
-                return;
-            }
+			if (set.Action == null)
+			{
+				//PluginLog.Debug("ActionFromSelf: set.Action is null. Exiting.");
+				return;
+			}
 
-            if (set.TargetEffects.Length == 0)
-            {
-                return;
-            }
+			if (set.Action?.ActionCategory.Value.RowId == (uint)ActionCate.Autoattack)
+			{
+				//PluginLog.Debug("ActionFromSelf: ActionCategory is Autoattack. Exiting.");
+				return;
+			}
 
-            Lumina.Excel.Sheets.Action? action = set.Action;
+			if (set.TargetEffects.Length == 0)
+			{
+				//PluginLog.Debug("ActionFromSelf: No TargetEffects. Exiting.");
+				return;
+			}
+
+			Lumina.Excel.Sheets.Action? action = set.Action;
             IGameObject? tar = set.Target;
 
-            // Record
-            DataCenter.AddActionRec(action!.Value);
+			// Record
+			//PluginLog.Debug($"ActionFromSelf: ActionType is {set.Header.ActionType}.");
+			DataCenter.AddActionRec(action!.Value);
             ShowStrSelf = set.ToString();
 
             DataCenter.HealHP = set.GetSpecificTypeEffect(ActionEffectType.Heal);

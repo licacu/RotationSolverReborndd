@@ -1,6 +1,8 @@
+using System.ComponentModel;
+
 namespace RotationSolver.RebornRotations.Healer;
 
-[Rotation("Reborn", CombatType.PvE, GameVersion = "7.35")]
+[Rotation("Reborn", CombatType.PvE, GameVersion = "7.4")]
 [SourceCode(Path = "main/RebornRotations/Healer/SGE_Reborn.cs")]
 
 public sealed class SGE_Reborn : SageRotation
@@ -81,10 +83,22 @@ public sealed class SGE_Reborn : SageRotation
     [RotationConfig(CombatType.PvE, Name = "Health threshold tank party member needs to use Pneuma as an AOE heal")]
     public float PneumaAOETankHeal { get; set; } = 0.6f;
 
-    #endregion
+	[RotationConfig(CombatType.PvE, Name = "Which opener to use")]
+	public OpenerStrategy OpenerSelection { get; set; } = OpenerStrategy.PneumaOpener;
 
-    #region Tracking Properties
-    private IBaseAction? _lastEukrasiaActionAim = null;
+	public enum OpenerStrategy : byte
+	{
+		[Description("Use Toxikon prepull opener")]
+		ToxikonOpener,
+
+		[Description("Use Pneuma prepull opener")]
+		PneumaOpener,
+	}
+
+	#endregion
+
+	#region Tracking Properties
+	private IBaseAction? _lastEukrasiaActionAim = null;
     public override void DisplayRotationStatus()
     {
         ImGui.Text($"Last E.Action Aim Cleared From Queue: {_lastEukrasiaActionAim}");
@@ -95,16 +109,22 @@ public sealed class SGE_Reborn : SageRotation
     #region Countdown Logic
     protected override IAction? CountDownAction(float remainTime)
     {
-        if (remainTime < PneumaPvE.Info.CastTime + CountDownAhead
+        if (OpenerSelection == OpenerStrategy.PneumaOpener && remainTime < PneumaPvE.Info.CastTime + CountDownAhead
             && PneumaPvE.CanUse(out IAction? act))
         {
             return act;
         }
 
-        if (remainTime <= 3 && UseBurstMedicine(out act))
-        {
-            return act;
-        }
+		if (remainTime <= 2.1f && UseBurstMedicine(out act))
+		{
+			return act;
+		}
+
+		if (OpenerSelection == OpenerStrategy.ToxikonOpener && remainTime < 1.5f + CountDownAhead
+			&& ToxikonIiPvE.CanUse(out act))
+		{
+			return act;
+		}
 
         if (remainTime <= 5 && EukrasiaPvE.CanUse(out act))
         {
@@ -454,37 +474,37 @@ public sealed class SGE_Reborn : SageRotation
         // Only decide the aim; do not require Eukrasia to be currently usable here.
         // Attempts to set correct Eukrasia action based on availability and MergedStatus.
         if (EukrasianPrognosisIiPvE.EnoughLevel && EukrasianPrognosisIiPvE.IsEnabled && MergedStatus.HasFlag(AutoStatus.DefenseArea)
-            && EukrasianPrognosisIiPvE.CanUse(out _, skipStatusNeed: true))
+            && EukrasianPrognosisIiPvE.CanUse(out _))
         {
             SetEukrasia(EukrasianPrognosisIiPvE);
         }
         else if (!EukrasianPrognosisIiPvE.EnoughLevel && EukrasianPrognosisPvE.EnoughLevel && EukrasianPrognosisPvE.IsEnabled && MergedStatus.HasFlag(AutoStatus.DefenseArea)
-            && EukrasianPrognosisPvE.CanUse(out _, skipStatusNeed: true))
+            && EukrasianPrognosisPvE.CanUse(out _))
         {
             SetEukrasia(EukrasianPrognosisPvE);
         }
         else if (EukrasianDiagnosisPvE.EnoughLevel && EukrasianDiagnosisPvE.IsEnabled && MergedStatus.HasFlag(AutoStatus.DefenseSingle)
-            && EukrasianDiagnosisPvE.CanUse(out _, skipStatusNeed: true))
+            && EukrasianDiagnosisPvE.CanUse(out _))
         {
             SetEukrasia(EukrasianDiagnosisPvE);
         }
         else if (EukrasianDyskrasiaPvE.EnoughLevel && EukrasianDyskrasiaPvE.IsEnabled && (!MergedStatus.HasFlag(AutoStatus.DefenseSingle) && !MergedStatus.HasFlag(AutoStatus.DefenseArea))
-            && EukrasianDyskrasiaPvE.CanUse(out _, skipStatusNeed: true))
+            && EukrasianDyskrasiaPvE.CanUse(out _))
         {
             SetEukrasia(EukrasianDyskrasiaPvE);
         }
-        else if ((!EukrasianDyskrasiaPvE.CanUse(out _, skipStatusNeed: true) || !DyskrasiaPvE.CanUse(out _))
-            && EukrasianDosisIiiPvE.CanUse(out _, skipStatusNeed: true) && EukrasianDosisIiiPvE.EnoughLevel && (!MergedStatus.HasFlag(AutoStatus.DefenseSingle) && !MergedStatus.HasFlag(AutoStatus.DefenseArea)) && EukrasianDosisIiiPvE.IsEnabled)
+        else if ((!EukrasianDyskrasiaPvE.CanUse(out _) || !DyskrasiaPvE.CanUse(out _))
+            && EukrasianDosisIiiPvE.CanUse(out _) && EukrasianDosisIiiPvE.EnoughLevel && (!MergedStatus.HasFlag(AutoStatus.DefenseSingle) && !MergedStatus.HasFlag(AutoStatus.DefenseArea)) && EukrasianDosisIiiPvE.IsEnabled)
         {
             SetEukrasia(EukrasianDosisIiiPvE);
         }
-        else if ((!EukrasianDyskrasiaPvE.CanUse(out _, skipStatusNeed: true) || !DyskrasiaPvE.CanUse(out _))
-            && EukrasianDosisIiPvE.CanUse(out _, skipStatusNeed: true) && !EukrasianDosisIiiPvE.EnoughLevel && EukrasianDosisIiPvE.EnoughLevel && (!MergedStatus.HasFlag(AutoStatus.DefenseSingle) && !MergedStatus.HasFlag(AutoStatus.DefenseArea)) && EukrasianDosisIiPvE.IsEnabled)
+        else if ((!EukrasianDyskrasiaPvE.CanUse(out _) || !DyskrasiaPvE.CanUse(out _))
+            && EukrasianDosisIiPvE.CanUse(out _) && !EukrasianDosisIiiPvE.EnoughLevel && EukrasianDosisIiPvE.EnoughLevel && (!MergedStatus.HasFlag(AutoStatus.DefenseSingle) && !MergedStatus.HasFlag(AutoStatus.DefenseArea)) && EukrasianDosisIiPvE.IsEnabled)
         {
             SetEukrasia(EukrasianDosisIiPvE);
         }
-        else if ((!EukrasianDyskrasiaPvE.CanUse(out _, skipStatusNeed: true) || !DyskrasiaPvE.CanUse(out _))
-            && EukrasianDosisPvE.CanUse(out _, skipStatusNeed: true) && !EukrasianDosisIiPvE.EnoughLevel && EukrasianDosisPvE.EnoughLevel && (!MergedStatus.HasFlag(AutoStatus.DefenseSingle) && !MergedStatus.HasFlag(AutoStatus.DefenseArea)) && EukrasianDosisPvE.IsEnabled)
+        else if ((!EukrasianDyskrasiaPvE.CanUse(out _) || !DyskrasiaPvE.CanUse(out _))
+            && EukrasianDosisPvE.CanUse(out _) && !EukrasianDosisIiPvE.EnoughLevel && EukrasianDosisPvE.EnoughLevel && (!MergedStatus.HasFlag(AutoStatus.DefenseSingle) && !MergedStatus.HasFlag(AutoStatus.DefenseArea)) && EukrasianDosisPvE.IsEnabled)
         {
             SetEukrasia(EukrasianDosisPvE);
         }
@@ -676,7 +696,7 @@ public sealed class SGE_Reborn : SageRotation
     [RotationDesc(ActionID.PneumaPvE, ActionID.PrognosisPvE, ActionID.EukrasianPrognosisPvE, ActionID.EukrasianPrognosisIiPvE)]
     protected override bool HealAreaGCD(out IAction? act)
     {
-        if (IsLastAction(ActionID.SwiftcastPvE) && SwiftLogic && MergedStatus.HasFlag(AutoStatus.Raise))
+        if ((HasSwift || IsLastAction(ActionID.SwiftcastPvE)) && SwiftLogic && MergedStatus.HasFlag(AutoStatus.Raise))
         {
             return base.HealAreaGCD(out act);
         }
@@ -721,7 +741,7 @@ public sealed class SGE_Reborn : SageRotation
     [RotationDesc(ActionID.DiagnosisPvE, ActionID.EukrasianDiagnosisPvE)]
     protected override bool HealSingleGCD(out IAction? act)
     {
-        if (IsLastAction(ActionID.SwiftcastPvE) && SwiftLogic && MergedStatus.HasFlag(AutoStatus.Raise))
+        if ((HasSwift || IsLastAction(ActionID.SwiftcastPvE)) && SwiftLogic && MergedStatus.HasFlag(AutoStatus.Raise))
         {
             return base.HealSingleGCD(out act);
         }
@@ -744,10 +764,22 @@ public sealed class SGE_Reborn : SageRotation
         return base.HealSingleGCD(out act);
     }
 
-    protected override bool GeneralGCD(out IAction? act)
+
+	[RotationDesc(ActionID.EgeiroPvE)]
+	protected override bool RaiseGCD(out IAction? act)
+	{
+		if (EgeiroPvE.CanUse(out act))
+		{
+			return true;
+		}
+
+		return base.RaiseGCD(out act);
+	}
+
+	protected override bool GeneralGCD(out IAction? act)
     {
-        if (IsLastAction(ActionID.SwiftcastPvE) && SwiftLogic && MergedStatus.HasFlag(AutoStatus.Raise))
-        {
+        if ((HasSwift || IsLastAction(ActionID.SwiftcastPvE)) && SwiftLogic && MergedStatus.HasFlag(AutoStatus.Raise))
+		{
             return base.GeneralGCD(out act);
         }
 

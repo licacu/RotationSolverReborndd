@@ -5,8 +5,8 @@ public partial class ViperRotation
     /// <inheritdoc/>
     public override MedicineType MedicineType => MedicineType.Dexterity;
 
-    /// <inheritdoc/>
-    public override bool IsBursting()
+	/// <inheritdoc/>
+	public override bool IsBursting()
     {
         if (HasHunterAndSwift)
         {
@@ -169,7 +169,9 @@ public partial class ViperRotation
         ImGui.Text($"SerpentOffering: {SerpentOffering}/100");
         ImGui.Text($"RattlingCoilStacks: {RattlingCoilStacks}/{MaxRattling}");
         ImGui.Text($"AnguineTributeStacks: {AnguineTributeStacks}/{MaxAnguine}");
-        ImGui.Spacing();
+		ImGui.Text($"VicewinderHasCharges: {VicewinderHasCharges}");
+		ImGui.Text($"VicepitHasCharges: {VicepitHasCharges}");
+		ImGui.Spacing();
         ImGui.Text("DreadCombo: " + DreadCombo.ToString());
         ImGui.Text("NODREAD: " + NODREAD.ToString());
         ImGui.Text("DreadActive: " + DreadActive.ToString());
@@ -228,35 +230,47 @@ public partial class ViperRotation
     /// </summary>
     public static bool HasHunterAndSwift => IsHunter && IsSwift;
 
-    /// <summary>
-    /// 
-    /// </summary>
-    public static bool WillSwiftEnd => Player.WillStatusEnd(5, true, StatusID.Swiftscaled);
+	/// <summary>
+	/// Returns true if Vicepit has at least one charge.
+	/// </summary>
+	public static bool VicepitHasCharges
+		=> (DataCenter.CurrentRotation is ViperRotation viper ? viper.VicepitPvE.Cooldown.CurrentCharges : 0) > 0;
+
+	/// <summary>
+	/// Returns true if Vicewinder has at least one charge.
+	/// </summary>
+	public static bool VicewinderHasCharges
+		=> (DataCenter.CurrentRotation is ViperRotation viper ? viper.VicewinderPvE.Cooldown.CurrentCharges : 0) > 0;
+
+	/// <summary>
+	/// 
+	/// </summary>
+	public static bool WillSwiftEnd => StatusHelper.PlayerWillStatusEnd(5, true, StatusID.Swiftscaled);
 
     /// <summary>
     /// 
     /// </summary>
-    public static bool WillHunterEnd => Player.WillStatusEnd(5, true, StatusID.HuntersInstinct);
+    public static bool WillHunterEnd => StatusHelper.PlayerWillStatusEnd(5, true, StatusID.HuntersInstinct);
 
     /// <summary>
     /// Indicates if the player has Swiftscaled.
     /// </summary>
-    public static bool IsSwift => Player.HasStatus(true, StatusID.Swiftscaled);
+    public static bool IsSwift => StatusHelper.PlayerHasStatus(true, StatusID.Swiftscaled);
 
     /// <summary>
     /// Indicates if the player has Hunters Instinct.
     /// </summary>
-    public static bool IsHunter => Player.HasStatus(true, StatusID.HuntersInstinct);
+    public static bool IsHunter => StatusHelper.PlayerHasStatus(true, StatusID.HuntersInstinct);
 
     /// <summary>
     /// Time left on Swiftscaled.
     /// </summary>
-    public static float? SwiftTime => Player.StatusTime(true, StatusID.Swiftscaled);
+    public static float? SwiftTime => StatusHelper.PlayerStatusTime(true, StatusID.Swiftscaled);
 
     /// <summary>
     /// Time left on Hunters Instinct.
     /// </summary>
-    public static float? HuntersTime => Player.StatusTime(true, StatusID.HuntersInstinct);
+    public static float? HuntersTime => StatusHelper.PlayerStatusTime(true, StatusID.HuntersInstinct);
 
     /// <summary>
     /// Returns which status will end first when both Hunters Instinct and Swiftscaled are active.
@@ -281,112 +295,112 @@ public partial class ViperRotation
     /// <summary>
     /// Indicates if the player has Honed Steel.
     /// </summary>
-    public static bool HasSteel => Player.HasStatus(true, StatusID.HonedSteel);
+    public static bool HasSteel => StatusHelper.PlayerHasStatus(true, StatusID.HonedSteel);
 
     /// <summary>
     /// Indicates if the player has Honed Reavers.
     /// </summary>
-    public static bool HasReavers => Player.HasStatus(true, StatusID.HonedReavers);
+    public static bool HasReavers => StatusHelper.PlayerHasStatus(true, StatusID.HonedReavers);
 
     /// <summary>
     /// Indicates if the player does not have Honed Reavers or Honed Steel.
     /// </summary>
-    public static bool NoHone => !Player.HasStatus(true, StatusID.HonedSteel) || !Player.HasStatus(true, StatusID.HonedReavers);
+    public static bool NoHone => !StatusHelper.PlayerHasStatus(true, StatusID.HonedSteel) || !StatusHelper.PlayerHasStatus(true, StatusID.HonedReavers);
 
     /// <summary>
     /// Indicates if the player has upcoming Hind attack.
     /// </summary>
-    public static bool HasHind => Player.HasStatus(true, StatusID.HindsbaneVenom) || Player.HasStatus(true, StatusID.HindstungVenom);
+    public static bool HasHind => StatusHelper.PlayerHasStatus(true, StatusID.HindsbaneVenom) || StatusHelper.PlayerHasStatus(true, StatusID.HindstungVenom);
 
     /// <summary>
     /// Indicates if the player has upcoming Hind attack.
     /// </summary>
-    public static bool HasHindsbane => Player.HasStatus(true, StatusID.HindsbaneVenom);
+    public static bool HasHindsbane => StatusHelper.PlayerHasStatus(true, StatusID.HindsbaneVenom);
 
     /// <summary>
     /// Indicates if the player has upcoming Hind attack.
     /// </summary>
-    public static bool HasHindstung => Player.HasStatus(true, StatusID.HindstungVenom);
+    public static bool HasHindstung => StatusHelper.PlayerHasStatus(true, StatusID.HindstungVenom);
 
     /// <summary>
     /// Indicates if the player has upcoming Flanks attack.
     /// </summary>
-    public static bool HasFlank => Player.HasStatus(true, StatusID.FlanksbaneVenom) || Player.HasStatus(true, StatusID.FlankstungVenom);
+    public static bool HasFlank => StatusHelper.PlayerHasStatus(true, StatusID.FlanksbaneVenom) || StatusHelper.PlayerHasStatus(true, StatusID.FlankstungVenom);
 
     /// <summary>
     /// Indicates if the player has upcoming Hind attack.
     /// </summary>
-    public static bool HasFlanksbane => Player.HasStatus(true, StatusID.FlanksbaneVenom);
+    public static bool HasFlanksbane => StatusHelper.PlayerHasStatus(true, StatusID.FlanksbaneVenom);
 
     /// <summary>
     /// Indicates if the player has upcoming Hind attack.
     /// </summary>
-    public static bool HasFlankstung => Player.HasStatus(true, StatusID.FlankstungVenom);
+    public static bool HasFlankstung => StatusHelper.PlayerHasStatus(true, StatusID.FlankstungVenom);
 
     /// <summary>
     /// Indicates if the player has upcoming Bane attack.
     /// </summary>
-    public static bool HasBane => Player.HasStatus(true, StatusID.HindsbaneVenom) || Player.HasStatus(true, StatusID.FlanksbaneVenom);
+    public static bool HasBane => StatusHelper.PlayerHasStatus(true, StatusID.HindsbaneVenom) || StatusHelper.PlayerHasStatus(true, StatusID.FlanksbaneVenom);
 
     /// <summary>
     /// Indicates if the player has upcoming Bane attack.
     /// </summary>
-    public static bool HasSting => Player.HasStatus(true, StatusID.HindstungVenom) || Player.HasStatus(true, StatusID.FlankstungVenom);
+    public static bool HasSting => StatusHelper.PlayerHasStatus(true, StatusID.HindstungVenom) || StatusHelper.PlayerHasStatus(true, StatusID.FlankstungVenom);
 
     /// <summary>
     /// Indicates if the player has no venom prepped.
     /// </summary>
-    public static bool HasNoVenom => !Player.HasStatus(true, StatusID.HindstungVenom) && !Player.HasStatus(true, StatusID.FlankstungVenom) && !Player.HasStatus(true, StatusID.HindsbaneVenom) && !Player.HasStatus(true, StatusID.FlanksbaneVenom);
+    public static bool HasNoVenom => !StatusHelper.PlayerHasStatus(true, StatusID.HindstungVenom) && !StatusHelper.PlayerHasStatus(true, StatusID.FlankstungVenom) && !StatusHelper.PlayerHasStatus(true, StatusID.HindsbaneVenom) && !StatusHelper.PlayerHasStatus(true, StatusID.FlanksbaneVenom);
 
     /// <summary>
     /// Indicates if the player can use Reawakened.
     /// </summary>
-    public static bool HasReadyToReawaken => Player.HasStatus(true, StatusID.ReadyToReawaken);
+    public static bool HasReadyToReawaken => StatusHelper.PlayerHasStatus(true, StatusID.ReadyToReawaken);
 
     /// <summary>
     /// Indicates if the player can use Reawakened.
     /// </summary>
-    public static bool HasReawakenedActive => Player.HasStatus(true, StatusID.Reawakened);
+    public static bool HasReawakenedActive => StatusHelper.PlayerHasStatus(true, StatusID.Reawakened);
 
     /// <summary>
     /// Indicates if the player has Hunters Venom.
     /// </summary>
-    public static bool HasHunterVenom => Player.HasStatus(true, StatusID.HuntersVenom);
+    public static bool HasHunterVenom => StatusHelper.PlayerHasStatus(true, StatusID.HuntersVenom);
 
     /// <summary>
     /// Indicates if the player has Hunters Venom.
     /// </summary>
-    public static bool HasSwiftVenom => Player.HasStatus(true, StatusID.SwiftskinsVenom);
+    public static bool HasSwiftVenom => StatusHelper.PlayerHasStatus(true, StatusID.SwiftskinsVenom);
 
     /// <summary>
     /// Indicates if the player has Fellhunters Venom.
     /// </summary>
-    public static bool HasFellHuntersVenom => Player.HasStatus(true, StatusID.FellhuntersVenom);
+    public static bool HasFellHuntersVenom => StatusHelper.PlayerHasStatus(true, StatusID.FellhuntersVenom);
 
     /// <summary>
     /// Indicates if the player has Fellskins Venom.
     /// </summary>
-    public static bool HasFellSkinsVenom => Player.HasStatus(true, StatusID.FellskinsVenom);
+    public static bool HasFellSkinsVenom => StatusHelper.PlayerHasStatus(true, StatusID.FellskinsVenom);
 
     /// <summary>
     /// Indicates if the player has Poised For Twinfang.
     /// </summary>
-    public static bool HasPoisedFang => Player.HasStatus(true, StatusID.PoisedForTwinfang);
+    public static bool HasPoisedFang => StatusHelper.PlayerHasStatus(true, StatusID.PoisedForTwinfang);
 
     /// <summary>
     /// Indicates if the player has Poised For Twinblood.
     /// </summary>
-    public static bool HasPoisedBlood => Player.HasStatus(true, StatusID.PoisedForTwinblood);
+    public static bool HasPoisedBlood => StatusHelper.PlayerHasStatus(true, StatusID.PoisedForTwinblood);
 
     /// <summary>
     /// Indicates if the player has Grimhunters Venom.
     /// </summary>
-    public static bool HasGrimHunter => Player.HasStatus(true, StatusID.GrimhuntersVenom);
+    public static bool HasGrimHunter => StatusHelper.PlayerHasStatus(true, StatusID.GrimhuntersVenom);
 
     /// <summary>
     /// Indicates if the player has Grimskins Venom.
     /// </summary>
-    public static bool HasGrimSkin => Player.HasStatus(true, StatusID.GrimskinsVenom);
+    public static bool HasGrimSkin => StatusHelper.PlayerHasStatus(true, StatusID.GrimskinsVenom);
     #endregion
 
     #region Actions Unassignable
@@ -608,7 +622,7 @@ public partial class ViperRotation
 
     static partial void ModifyVicewinderPvE(ref ActionSetting setting)
     {
-        setting.ActionCheck = () => SerpentOffering <= 90 && RattlingCoilStacks < MaxRattling && AnguineTributeStacks == 0 && NODREAD;
+        setting.ActionCheck = () => VicewinderHasCharges && SerpentOffering <= 90 && RattlingCoilStacks < MaxRattling && AnguineTributeStacks == 0 && NODREAD;
     }
 
     static partial void ModifyHuntersCoilPvE(ref ActionSetting setting)
@@ -623,7 +637,7 @@ public partial class ViperRotation
 
     static partial void ModifyVicepitPvE(ref ActionSetting setting)
     {
-        setting.ActionCheck = () => SerpentOffering <= 90 && RattlingCoilStacks < MaxRattling && AnguineTributeStacks == 0 && NODREAD;
+        setting.ActionCheck = () => VicepitHasCharges && SerpentOffering <= 90 && RattlingCoilStacks < MaxRattling && AnguineTributeStacks == 0 && NODREAD;
         setting.CreateConfig = () => new ActionConfig()
         {
             AoeCount = 3,
@@ -823,37 +837,37 @@ public partial class ViperRotation
     #region PvP Actions
     static partial void ModifyRavenousBitePvP(ref ActionSetting setting)
     {
-        setting.CreateConfig = () => new ActionConfig();
+        
     }
 
     static partial void ModifySwiftskinsStingPvP(ref ActionSetting setting)
     {
-        setting.CreateConfig = () => new ActionConfig();
+        
     }
 
     static partial void ModifyPiercingFangsPvP(ref ActionSetting setting)
     {
-        setting.CreateConfig = () => new ActionConfig();
+        
     }
 
     static partial void ModifyBarbarousBitePvP(ref ActionSetting setting)
     {
-        setting.CreateConfig = () => new ActionConfig();
+        
     }
 
     static partial void ModifyHuntersStingPvP(ref ActionSetting setting)
     {
-        setting.CreateConfig = () => new ActionConfig();
+        
     }
 
     static partial void ModifySteelFangsPvP(ref ActionSetting setting)
     {
-        setting.CreateConfig = () => new ActionConfig();
+        
     }
 
     static partial void ModifyBloodcoilPvP(ref ActionSetting setting)
     {
-        setting.CreateConfig = () => new ActionConfig();
+        
     }
 
     static partial void ModifyUncoiledFuryPvP(ref ActionSetting setting)
@@ -875,17 +889,17 @@ public partial class ViperRotation
 
     static partial void ModifySlitherPvP(ref ActionSetting setting)
     {
-        setting.CreateConfig = () => new ActionConfig();
+        
     }
 
     static partial void ModifySnakeScalesPvP(ref ActionSetting setting)
     {
-        setting.CreateConfig = () => new ActionConfig();
+        
     }
 
     static partial void ModifyRattlingCoilPvP(ref ActionSetting setting)
     {
-        setting.CreateConfig = () => new ActionConfig();
+        
     }
 
     static partial void ModifyFirstGenerationPvP(ref ActionSetting setting)
@@ -945,25 +959,26 @@ public partial class ViperRotation
     static partial void ModifyDeathRattlePvP(ref ActionSetting setting)
     {
         setting.ActionCheck = () => Service.GetAdjustedActionId(ActionID.SerpentsTailPvP) == ActionID.DeathRattlePvP;
-        setting.CreateConfig = () => new ActionConfig();
-    }
+		setting.MPOverride = () => 0;
+	}
 
     static partial void ModifyTwinfangBitePvP(ref ActionSetting setting)
     {
         setting.ActionCheck = () => Service.GetAdjustedActionId(ActionID.SerpentsTailPvP) == ActionID.TwinfangBitePvP;
-        setting.CreateConfig = () => new ActionConfig();
-    }
+		setting.MPOverride = () => 0;
+	}
 
     static partial void ModifyTwinbloodBitePvP(ref ActionSetting setting)
     {
         setting.ActionCheck = () => Service.GetAdjustedActionId(ActionID.SerpentsTailPvP) == ActionID.TwinbloodBitePvP;
-        setting.CreateConfig = () => new ActionConfig();
-    }
+		setting.MPOverride = () => 0;
+	}
 
     static partial void ModifyUncoiledTwinfangPvP(ref ActionSetting setting)
     {
         setting.ActionCheck = () => Service.GetAdjustedActionId(ActionID.SerpentsTailPvP) == ActionID.UncoiledTwinfangPvP;
-        setting.CreateConfig = () => new ActionConfig()
+		setting.MPOverride = () => 0;
+		setting.CreateConfig = () => new ActionConfig()
         {
             AoeCount = 1,
         };
@@ -972,7 +987,8 @@ public partial class ViperRotation
     static partial void ModifyUncoiledTwinbloodPvP(ref ActionSetting setting)
     {
         setting.ActionCheck = () => Service.GetAdjustedActionId(ActionID.SerpentsTailPvP) == ActionID.UncoiledTwinbloodPvP;
-        setting.CreateConfig = () => new ActionConfig()
+		setting.MPOverride = () => 0;
+		setting.CreateConfig = () => new ActionConfig()
         {
             AoeCount = 1,
         };
@@ -981,7 +997,8 @@ public partial class ViperRotation
     static partial void ModifyFirstLegacyPvP(ref ActionSetting setting)
     {
         setting.ActionCheck = () => Service.GetAdjustedActionId(ActionID.SerpentsTailPvP) == ActionID.FirstLegacyPvP;
-        setting.CreateConfig = () => new ActionConfig()
+		setting.MPOverride = () => 0;
+		setting.CreateConfig = () => new ActionConfig()
         {
             AoeCount = 1,
         };
@@ -990,7 +1007,8 @@ public partial class ViperRotation
     static partial void ModifySecondLegacyPvP(ref ActionSetting setting)
     {
         setting.ActionCheck = () => Service.GetAdjustedActionId(ActionID.SerpentsTailPvP) == ActionID.SecondLegacyPvP;
-        setting.CreateConfig = () => new ActionConfig()
+		setting.MPOverride = () => 0;
+		setting.CreateConfig = () => new ActionConfig()
         {
             AoeCount = 1,
         };
@@ -999,7 +1017,8 @@ public partial class ViperRotation
     static partial void ModifyThirdLegacyPvP(ref ActionSetting setting)
     {
         setting.ActionCheck = () => Service.GetAdjustedActionId(ActionID.SerpentsTailPvP) == ActionID.ThirdLegacyPvP;
-        setting.CreateConfig = () => new ActionConfig()
+		setting.MPOverride = () => 0;
+		setting.CreateConfig = () => new ActionConfig()
         {
             AoeCount = 1,
         };
@@ -1008,7 +1027,8 @@ public partial class ViperRotation
     static partial void ModifyFourthLegacyPvP(ref ActionSetting setting)
     {
         setting.ActionCheck = () => Service.GetAdjustedActionId(ActionID.SerpentsTailPvP) == ActionID.FourthLegacyPvP;
-        setting.CreateConfig = () => new ActionConfig()
+		setting.MPOverride = () => 0;
+		setting.CreateConfig = () => new ActionConfig()
         {
             AoeCount = 1,
         };
@@ -1017,7 +1037,8 @@ public partial class ViperRotation
     static partial void ModifyBacklashPvP(ref ActionSetting setting)
     {
         setting.ActionCheck = () => Service.GetAdjustedActionId(ActionID.SnakeScalesPvP) == ActionID.BacklashPvP;
-        setting.CreateConfig = () => new ActionConfig()
+		setting.MPOverride = () => 0;
+		setting.CreateConfig = () => new ActionConfig()
         {
             AoeCount = 1,
         };

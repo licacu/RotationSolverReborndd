@@ -64,7 +64,7 @@ public partial class SageRotation
     /// <summary>
     /// Player has Kardia.
     /// </summary>
-    public static bool HasKardia => Player.HasStatus(true, StatusID.Kardia);
+    public static bool HasKardia => StatusHelper.PlayerHasStatus(true, StatusID.Kardia);
     #endregion
 
     #region PvE Actions
@@ -89,8 +89,16 @@ public partial class SageRotation
     {
         setting.TargetType = TargetType.Kardia;
         setting.TargetStatusProvide = [StatusID.Kardion];
-        setting.ActionCheck = () => !DataCenter.PartyMembers.Any(m => m.HasStatus(true, StatusID.Kardion));
-        setting.CreateConfig = () => new ActionConfig()
+		setting.ActionCheck = () =>
+		{
+			foreach (var m in DataCenter.PartyMembers)
+			{
+				if (m.HasStatus(true, StatusID.Kardion))
+					return false;
+			}
+			return true;
+		};
+		setting.CreateConfig = () => new ActionConfig()
         {
             TimeToKill = 0,
         };
@@ -109,7 +117,7 @@ public partial class SageRotation
     static partial void ModifyEgeiroPvE(ref ActionSetting setting)
     {
         setting.IsFriendly = true;
-        setting.ActionCheck = () => Player.CurrentMp >= RaiseMPMinimum;
+        setting.ActionCheck = () => Player?.CurrentMp >= RaiseMPMinimum;
     }
 
     static partial void ModifyPhysisPvE(ref ActionSetting setting)
@@ -176,14 +184,22 @@ public partial class SageRotation
         };
     }
 
-    static partial void ModifySoteriaPvE(ref ActionSetting setting)
-    {
-        setting.StatusProvide = [StatusID.Soteria];
-        setting.TargetType = TargetType.Self;
-        setting.ActionCheck = () => DataCenter.PartyMembers.Any(m => m.HasStatus(true, StatusID.Kardion));
-    }
+	static partial void ModifySoteriaPvE(ref ActionSetting setting)
+	{
+		setting.StatusProvide = [StatusID.Soteria];
+		setting.TargetType = TargetType.Self;
+		setting.ActionCheck = () =>
+		{
+			foreach (var m in DataCenter.PartyMembers)
+			{
+				if (m.HasStatus(true, StatusID.Kardion))
+					return true;
+			}
+			return false;
+		};
+	}
 
-    static partial void ModifyIcarusPvE(ref ActionSetting setting)
+	static partial void ModifyIcarusPvE(ref ActionSetting setting)
     {
         setting.SpecialType = SpecialActionType.HostileFriendlyMovingForward;
     }
@@ -483,7 +499,7 @@ public partial class SageRotation
 
     static partial void ModifyToxikonIiPvP(ref ActionSetting setting)
     {
-        setting.ActionCheck = () => Player.HasStatus(true, StatusID.Addersting);
+        setting.ActionCheck = () => StatusHelper.PlayerHasStatus(true, StatusID.Addersting);
         setting.TargetStatusProvide = [StatusID.Toxikon];
         setting.CreateConfig = () => new ActionConfig()
         {

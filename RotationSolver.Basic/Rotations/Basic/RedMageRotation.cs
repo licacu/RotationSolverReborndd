@@ -41,11 +41,6 @@ public partial class RedMageRotation
     /// <summary>
     /// 
     /// </summary>
-    public bool EnoughManaCombo => JobGauge.BlackMana >= ManaNeeded() && JobGauge.WhiteMana >= ManaNeeded();
-
-    /// <summary>
-    /// 
-    /// </summary>
     public static bool HasEnoughManaFor1Combo => BlackMana >= 20 && WhiteMana >= 20;
 
     /// <summary>
@@ -73,40 +68,124 @@ public partial class RedMageRotation
     /// </summary>
     public static bool CanUseHoly => MoreWhiteMana && JobGauge.WhiteMana - JobGauge.BlackMana < 18;
 
-    /// <summary>
-    /// 
-    /// </summary>
-    public int ManaNeeded()
-    {
-        if (!ZwerchhauPvE.EnoughLevel) return 20;
+	/// <summary>
+	/// 
+	/// </summary>
+	public int ManaNeededNoPooling()
+	{
+		if (!ZwerchhauPvE.EnoughLevel) return 20;
 
-        if (ZwerchhauPvE.EnoughLevel && !RedoublementPvE.EnoughLevel) return 35;
+		if (ZwerchhauPvE.EnoughLevel && !RedoublementPvE.EnoughLevel) return 35;
 
-        if (RedoublementPvE.EnoughLevel && !EmboldenPvE.EnoughLevel) return 50;
+		if (RedoublementPvE.EnoughLevel && !EmboldenPvE.EnoughLevel) return 50;
 
-        if (EmboldenPvE.EnoughLevel)
-        {
-            if (HasEmbolden) return 50;
-            switch (EmboldenPvE.Cooldown.RecastTimeElapsed)
-            {
-                case > 80:
-                    return 60;
-                case > 40 and <= 80:
-                    return 50;
-                case > 15 and <= 40:
-                    return 70;
-                case <= 15:
-                    return 90;
-            }
-        }
+		if (EmboldenPvE.EnoughLevel)
+		{
+			if (HasEmbolden) return 50;
+			switch (EmboldenPvE.Cooldown.RecastTimeElapsed)
+			{
+				case > 80:
+					return 60;
+				case > 40 and <= 80:
+					return 50;
+				case > 15 and <= 40:
+					return 70;
+				case <= 15:
+					return 90;
+			}
+		}
 
-        return 0;
-    }
+		return 0;
+	}
 
-    /// <summary>
-    /// 
-    /// </summary>
-    public static string? VerEndsFirst
+	/// <summary>
+	/// Asymmetric mana gating for starting melee: separate requirements for White and Black.
+	/// Pools to 42|31 when Embolden is approaching, falls back to 50 or 20/35/50 depending on unlocks and Embolden state.
+	/// </summary>
+	public int ManaNeededWhite()
+	{
+		if (!ZwerchhauPvE.EnoughLevel) return 20;
+		if (ZwerchhauPvE.EnoughLevel && !RedoublementPvE.EnoughLevel) return 35;
+		if (RedoublementPvE.EnoughLevel && !EmboldenPvE.EnoughLevel) return 50;
+
+		// With Embolden unlocked:
+		if (EmboldenPvE.EnoughLevel)
+		{
+			// If Embolden is currently active, use standard 50 requirement
+			if (HasEmbolden) return 50;
+
+			// Pooling window: when Embolden’s recast is close, prefer pooling targets
+			switch (EmboldenPvE.Cooldown.RecastTimeRemain)
+			{
+				case > 80:
+					// Embolden far: moderate pooling
+					return 60; // maintain original behavior
+				case > 30 and <= 80:
+					// Mid window: normal threshold
+					return 50;
+				case <= 30:
+					// Approaching: start pooling — white side uses 42(+50=92)
+					return 92;
+			}
+		}
+
+		return 0;
+	}
+
+	/// <summary>
+	/// Black mana counterpart for asymmetric pooling.
+	/// </summary>
+	public int ManaNeededBlack()
+	{
+		if (!ZwerchhauPvE.EnoughLevel) return 20;
+		if (ZwerchhauPvE.EnoughLevel && !RedoublementPvE.EnoughLevel) return 35;
+		if (RedoublementPvE.EnoughLevel && !EmboldenPvE.EnoughLevel) return 50;
+
+		if (EmboldenPvE.EnoughLevel)
+		{
+			if (HasEmbolden) return 50;
+
+			switch (EmboldenPvE.Cooldown.RecastTimeRemain)
+			{
+				case > 80:
+					return 60;
+				case > 30 and <= 80:
+					return 50;
+				case <= 30:
+                    // Approaching: start pooling — black side uses 31(+50=81)
+                    return 81;
+			}
+		}
+
+		return 0;
+	}
+
+	/// <summary>
+	/// Backward-compatible aggregate for callers that still use a single threshold.
+	/// Returns the max of both per-color needs to remain conservative.
+	/// </summary>
+	public int ManaNeeded()
+	{
+		// Preserve original behavior for legacy callers by returning the conservative max.
+		var w = ManaNeededWhite();
+		var b = ManaNeededBlack();
+		return Math.Max(w, b);
+	}
+
+	/// <summary>
+	/// Enough mana for starting melee, respecting asymmetric pooling.
+	/// </summary>
+	public bool EnoughManaComboPooling => CanMagickedSwordplay || (JobGauge.WhiteMana >= ManaNeededWhite() && JobGauge.BlackMana >= ManaNeededBlack());
+
+	/// <summary>
+	/// Enough mana for starting melee, respecting asymmetric pooling.
+	/// </summary>
+	public bool EnoughManaComboNoPooling => CanMagickedSwordplay || (JobGauge.BlackMana >= ManaNeededNoPooling() && JobGauge.WhiteMana >= ManaNeededNoPooling());
+
+	/// <summary>
+	/// 
+	/// </summary>
+	public static string? VerEndsFirst
     {
         get
         {
@@ -121,38 +200,53 @@ public partial class RedMageRotation
             return "Equal";
         }
     }
-    #endregion
 
-    #region Status Check
+	/// <summary>
+	/// 
+	/// </summary>
+	public bool IsInMeleeCombo
+	{
+		get
+		{
+			if (IsLastComboAction(ActionID.RipostePvE, ActionID.EnchantedRipostePvE, ActionID.EnchantedRipostePvE_45960) && ZwerchhauPvE.EnoughLevel && (HasEnoughManaFor23Combo || CanMagickedSwordplay))
+				return true;
+			if (IsLastComboAction(ActionID.ZwerchhauPvE, ActionID.EnchantedZwerchhauPvE, ActionID.EnchantedZwerchhauPvE_45961) && RedoublementPvE.EnoughLevel && (HasEnoughManaFor23Combo || CanMagickedSwordplay))
+				return true;
+			return false;
+		}
+	}
+	#endregion
+
+	#region Status Check
+	/// <summary>
+	/// 
+	/// </summary>
+	public static bool HasEmbolden => StatusHelper.PlayerHasStatus(true, StatusID.Embolden);
+
     /// <summary>
     /// 
     /// </summary>
-    public static bool HasEmbolden => Player.HasStatus(true, StatusID.Embolden);
+    public static bool HasEmbolden2 => StatusHelper.PlayerHasStatus(true, StatusID.Embolden_1297);
 
     /// <summary>
     /// 
     /// </summary>
-    public static bool HasEmbolden2 => Player.HasStatus(true, StatusID.Embolden_1297);
+    public static bool HasDualcast => StatusHelper.PlayerHasStatus(true, StatusID.Dualcast);
 
     /// <summary>
     /// 
     /// </summary>
-    public static bool HasDualcast => Player.HasStatus(true, StatusID.Dualcast);
-
-    /// <summary>
-    /// 
-    /// </summary>
-    public static bool HasAccelerate => Player.HasStatus(true, StatusID.Acceleration);
+    public static bool HasAccelerate => StatusHelper.PlayerHasStatus(true, StatusID.Acceleration);
 
     /// <summary>
     /// Time left on VerFire.
     /// </summary>
-    public static float? VerFireTime => Player.StatusTime(true, StatusID.VerfireReady);
+    public static float? VerFireTime => StatusHelper.PlayerStatusTime(true, StatusID.VerfireReady);
 
     /// <summary>
     /// Time left on VerStone.
     /// </summary>
-    public static float? VerStoneTime => Player.StatusTime(true, StatusID.VerstoneReady);
+    public static float? VerStoneTime => StatusHelper.PlayerStatusTime(true, StatusID.VerstoneReady);
 
     /// <summary>
     /// 
@@ -167,37 +261,37 @@ public partial class RedMageRotation
     /// <summary>
     /// 
     /// </summary>
-    public static bool CanVerStone => Player.HasStatus(true, StatusID.VerstoneReady);
+    public static bool CanVerStone => StatusHelper.PlayerHasStatus(true, StatusID.VerstoneReady);
 
     /// <summary>
     /// 
     /// </summary>
-    public static bool CanVerFire => Player.HasStatus(true, StatusID.VerfireReady);
+    public static bool CanVerFire => StatusHelper.PlayerHasStatus(true, StatusID.VerfireReady);
 
     /// <summary>
     /// 
     /// </summary>
-    public static bool CanGrandImpact => Player.HasStatus(true, StatusID.GrandImpactReady);
+    public static bool CanGrandImpact => StatusHelper.PlayerHasStatus(true, StatusID.GrandImpactReady);
 
     /// <summary>
     /// 
     /// </summary>
-    public static bool CanMagickedSwordplay => Player.HasStatus(true, StatusID.MagickedSwordplay);
+    public static bool CanMagickedSwordplay => StatusHelper.PlayerHasStatus(true, StatusID.MagickedSwordplay);
+
+	/// <summary>
+	/// 
+	/// </summary>
+	public static bool HasManafication => StatusHelper.PlayerHasStatus(true, StatusID.Manafication);
 
     /// <summary>
     /// 
     /// </summary>
-    public static bool HasManafication => Player.HasStatus(true, StatusID.Manafication);
+    public static bool CanPrefulgence => StatusHelper.PlayerHasStatus(true, StatusID.PrefulgenceReady);
 
     /// <summary>
     /// 
     /// </summary>
-    public static bool CanPrefulgence => Player.HasStatus(true, StatusID.PrefulgenceReady);
-
-    /// <summary>
-    /// 
-    /// </summary>
-    public static bool HasThornedFlourish => Player.HasStatus(true, StatusID.ThornedFlourish);
+    public static bool HasThornedFlourish => StatusHelper.PlayerHasStatus(true, StatusID.ThornedFlourish);
 
     /// <summary>
     /// 
@@ -214,7 +308,16 @@ public partial class RedMageRotation
         ImGui.Text("ManaStacks: " + ManaStacks.ToString());
         ImGui.Text("MoreWhiteMana: " + MoreWhiteMana.ToString());
         ImGui.Text("Can Heal Single Spell: " + CanHealSingleSpell.ToString());
-    }
+		ImGui.Spacing();
+		ImGui.Text("Embolden RecastTimeRemain: " + EmboldenPvE.Cooldown.RecastTimeRemain.ToString());
+		ImGui.Text("ManaNeededBlack: " + ManaNeededBlack().ToString());
+		ImGui.Text("ManaNeededWhite: " + ManaNeededWhite().ToString());
+		ImGui.Text("EnoughManaComboPooling: " + EnoughManaComboPooling.ToString());
+        ImGui.Spacing();
+		ImGui.Text("Embolden RecastTimeElapsed: " + EmboldenPvE.Cooldown.RecastTimeElapsed.ToString());
+		ImGui.Text("ManaNeededNoPooling: " + ManaNeededNoPooling().ToString());
+		ImGui.Text("EnoughManaComboNoPooling: " + EnoughManaComboNoPooling.ToString());
+	}
     #endregion
 
     #region PvE Actions
@@ -354,7 +457,7 @@ public partial class RedMageRotation
     static partial void ModifyVerraisePvE(ref ActionSetting setting)
     {
         setting.StatusNeed = [StatusID.Dualcast];
-        setting.ActionCheck = () => Player.CurrentMp >= RaiseMPMinimum;
+        setting.ActionCheck = () => Player?.CurrentMp >= RaiseMPMinimum;
     }
 
     static partial void ModifyVerflarePvE(ref ActionSetting setting)
@@ -407,7 +510,7 @@ public partial class RedMageRotation
 
     static partial void ModifyMagickBarrierPvE(ref ActionSetting setting)
     {
-        setting.ActionCheck = () => IsMagicalDamageIncoming();
+        //setting.ActionCheck = () => IsMagicalDamageIncoming; People kept complaining that MB was never used even when they werent actually taking magic damage so disabling this for now
         setting.CreateConfig = () => new ActionConfig()
         {
             AoeCount = 1,
@@ -458,17 +561,44 @@ public partial class RedMageRotation
         setting.ActionCheck = () => HasEnoughManaFor1Combo || CanMagickedSwordplay;
     }
 
-    static partial void ModifyEnchantedZwerchhauPvE(ref ActionSetting setting)
+	static partial void ModifyEnchantedRipostePvE_45960(ref ActionSetting setting)
+	{
+		setting.ActionCheck = () => HasManafication && (HasEnoughManaFor1Combo || CanMagickedSwordplay);
+		setting.CreateConfig = () => new ActionConfig()
+		{
+			AoeCount = 1,
+		};
+	}
+
+	static partial void ModifyEnchantedZwerchhauPvE(ref ActionSetting setting)
     {
         setting.ActionCheck = () => HasEnoughManaFor23Combo || CanMagickedSwordplay;
     }
 
-    static partial void ModifyEnchantedRedoublementPvE(ref ActionSetting setting)
+	static partial void ModifyEnchantedZwerchhauPvE_45961(ref ActionSetting setting)
+	{
+		setting.ActionCheck = () => HasManafication && (HasEnoughManaFor23Combo || CanMagickedSwordplay);
+		setting.CreateConfig = () => new ActionConfig()
+		{
+			AoeCount = 1,
+		};
+	}
+
+	static partial void ModifyEnchantedRedoublementPvE(ref ActionSetting setting)
     {
         setting.ActionCheck = () => HasEnoughManaFor23Combo || CanMagickedSwordplay;
     }
 
-    static partial void ModifyEnchantedMoulinetPvE(ref ActionSetting setting)
+	static partial void ModifyEnchantedRedoublementPvE_45962(ref ActionSetting setting)
+	{
+		setting.ActionCheck = () => HasManafication && (HasEnoughManaFor23Combo || CanMagickedSwordplay);
+		setting.CreateConfig = () => new ActionConfig()
+		{
+			AoeCount = 1,
+		};
+	}
+
+	static partial void ModifyEnchantedMoulinetPvE(ref ActionSetting setting)
     {
         setting.ActionCheck = () => HasEnoughManaFor1Combo || CanMagickedSwordplay;
     }

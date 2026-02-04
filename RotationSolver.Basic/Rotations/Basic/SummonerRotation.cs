@@ -151,7 +151,7 @@ public partial class SummonerRotation
     /// <summary>
     /// 
     /// </summary>
-    public static bool HasSearingLight => Player.HasStatus(true, StatusID.SearingLight);
+    public static bool HasSearingLight => StatusHelper.PlayerHasStatus(true, StatusID.SearingLight);
 
     #endregion
 
@@ -235,7 +235,8 @@ public partial class SummonerRotation
     static partial void ModifyRadiantAegisPvE(ref ActionSetting setting)
     {
         setting.ActionCheck = () => HasSummon;
-        setting.IsFriendly = true;
+		setting.StatusProvide = [StatusID.RadiantAegis];
+		setting.IsFriendly = true;
     }
 
     static partial void ModifyPhysickPvE(ref ActionSetting setting)
@@ -275,7 +276,7 @@ public partial class SummonerRotation
 
     static partial void ModifyResurrectionPvE(ref ActionSetting setting)
     {
-        setting.ActionCheck = () => Player.CurrentMp >= RaiseMPMinimum;
+        setting.ActionCheck = () => Player?.CurrentMp >= RaiseMPMinimum;
     }
 
     static partial void ModifySummonTopazPvE(ref ActionSetting setting)
@@ -688,8 +689,8 @@ public partial class SummonerRotation
 
     static partial void ModifySlipstreamPvE(ref ActionSetting setting)
     {
-        setting.ActionCheck = () => !HasSwift && !Player.WillStatusEnd(ActionID.SlipstreamPvE.GetCastTime(), true, StatusID.GarudasFavor) 
-                                    || HasSwift && !Player.WillStatusEndGCD(0, 0, true, StatusID.GarudasFavor);
+        setting.ActionCheck = () => !HasSwift && !StatusHelper.PlayerWillStatusEnd(ActionID.SlipstreamPvE.GetCastTime(), true, StatusID.GarudasFavor) 
+                                    || HasSwift && !StatusHelper.PlayerWillStatusEndGCD(0, 0, true, StatusID.GarudasFavor);
         setting.StatusNeed = [StatusID.GarudasFavor];
         setting.StatusProvide = [StatusID.Slipstream];
         setting.CreateConfig = () => new ActionConfig()

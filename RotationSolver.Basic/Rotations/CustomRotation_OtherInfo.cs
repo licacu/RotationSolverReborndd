@@ -1,5 +1,4 @@
 ﻿using Dalamud.Game;
-using Dalamud.Game.ClientState.JobGauge.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Services;
 using ECommons.DalamudServices;
@@ -10,51 +9,68 @@ using Lumina.Excel.Sheets;
 namespace RotationSolver.Basic.Rotations;
 public partial class CustomRotation
 {
-    #region Player
-    /// <summary>
-    /// This is the player.
-    /// </summary>
-    protected static IPlayerCharacter Player => ECommons.GameHelpers.Player.Object;
+	#region Player
+	/// <summary>
+	/// This is the player.
+	/// </summary>
+	protected static IPlayerCharacter? Player => ECommons.GameHelpers.Player.Object;
 
-    /// <summary>
-    /// Does player have swift cast, dual cast or triple cast.
-    /// </summary>
-    [Description("Has Swift")]
-    public static bool HasSwift => Player?.HasStatus(true, StatusHelper.SwiftcastStatus) ?? false;
+	/// <summary>
+	/// 
+	/// </summary>
+	[Description("IsCasting")]
+	public static bool IsCasting => Player?.IsCasting ?? false;
+
+	/// <summary>
+	/// 
+	/// </summary>
+	[Description("Is RSR active")]
+	public static bool StateEnabled => DataCenter.State;
+
+	/// <summary>
+	/// Does player have swift cast, dual cast or triple cast. State
+	/// </summary>
+	[Description("Has Swift")]
+    public static bool HasSwift => StatusHelper.PlayerHasStatus(true, StatusHelper.SwiftcastStatus);
+
+	/// <summary>
+	/// 
+	/// </summary>
+	[Description("Has tank stance")]
+    public static bool HasTankStance => StatusHelper.PlayerHasStatus(true, StatusHelper.TankStanceStatus);
 
     /// <summary>
     /// 
     /// </summary>
     [Description("Has tank stance")]
-    public static bool HasTankStance => Player?.HasStatus(true, StatusHelper.TankStanceStatus) ?? false;
+    public static bool HasTankInvuln => StatusHelper.PlayerHasStatus(true, StatusHelper.NoNeedHealingStatus);
 
     /// <summary>
     /// 
     /// </summary>
-    [Description("Has tank stance")]
-    public static bool HasTankInvuln => Player?.HasStatus(true, StatusHelper.NoNeedHealingStatus) ?? false;
+    public static bool HasVariantCure => StatusHelper.PlayerHasStatus(true, StatusID.VariantCureSet);
 
-    /// <summary>
-    /// 
-    /// </summary>
-    public static bool HasVariantCure => Player.HasStatus(true, StatusID.VariantCureSet);
+	/// <summary>
+	/// 
+	/// </summary>
+	public static bool HasPVPGuard => StatusHelper.PlayerHasStatus(true, StatusID.Guard) || (IsLastAction(ActionID.GuardPvP) && TimeSinceLastActionCapped < 0.5f);
 
-    /// <summary>
-    /// Check the player is moving, such as running, walking or jumping.
-    /// </summary>
-    [Description("Is Moving or Jumping")]
+	/// <summary>
+	/// Check the player is moving, such as running, walking or jumping.
+	/// </summary>
+	[Description("Is Moving or Jumping")]
     public static bool IsMoving => DataCenter.IsMoving;
 
     /// <summary>
     /// Check if the player is dead.
     /// </summary>
     [Description("Is Dead, or inversely, is Alive")]
-    public static bool IsDead => Player.IsDead;
+	public static bool IsDead => Player?.IsDead ?? false;
 
-    /// <summary>
-    /// Is in combat.
-    /// </summary>
-    [Description("In Combat")]
+	/// <summary>
+	/// Is in combat.
+	/// </summary>
+	[Description("In Combat")]
     public static bool InCombat => DataCenter.InCombat;
 
     /// <summary>
@@ -145,7 +161,7 @@ public partial class CustomRotation
                     var buff = Buffs[i];
                     if (buff.Type != StatusType.Buff) continue;
 
-                    if (!Player.HasStatus(false, buff.Ids) || Player.WillStatusEnd(0, false, buff.Ids))
+                    if (!StatusHelper.PlayerHasStatus(false, buff.Ids) || StatusHelper.PlayerWillStatusEnd(0, false, buff.Ids))
                     {
                         playerHasBuffs = false;
                         break;
@@ -191,9 +207,9 @@ public partial class CustomRotation
                     if (buff.Type == StatusType.Buff)
                     {
                         if (Player == null) continue;
-                        if (!Player.HasStatus(false, buff.Ids)) continue;
+                        if (!StatusHelper.PlayerHasStatus(false, buff.Ids)) continue;
 
-                        float remaining = Player.StatusTime(true, buff.Ids[0]);
+                        float remaining = StatusHelper.PlayerStatusTime(true, buff.Ids[0]);
                         if (remaining > maxDuration) maxDuration = remaining;
                     }
                     else if (buff.Type == StatusType.Debuff)
@@ -230,12 +246,15 @@ public partial class CustomRotation
         Buffs.Clear();
         var processedJobs = new HashSet<string>();
 
-        if (PartyComposition == null)
-        {
-            var abbr = Player.ClassJob.Value.Abbreviation.ToString();
-            AddJobBuffs(abbr, processedJobs);
-        }
-        else
+		if (PartyComposition == null)
+		{
+			if (Player?.ClassJob.Value.Abbreviation != null)
+			{
+				var abbr = Player.ClassJob.Value.Abbreviation.ToString();
+				AddJobBuffs(abbr, processedJobs);
+			}
+		}
+		else
         {
             foreach (var job in PartyComposition)
             {
@@ -405,7 +424,7 @@ public partial class CustomRotation
         {
             if (Player == null) return null;
             IBattleChara lowest = Player;
-            var lowestHp = Player.GetHealthRatio();
+            var lowestHp = Player?.GetHealthRatio();
 
             foreach (var member in PartyMembers)
             {
@@ -447,7 +466,7 @@ public partial class CustomRotation
         var hostileEnum = AllHostileTargets;
 
         // Determine (heuristically) if the imminent AoE is magical.
-        bool incomingMagical = IsMagicalDamageIncoming();
+        bool incomingMagical = IsMagicalDamageIncoming;
 
         // Enemy debuffs (scan once).
         bool addle = false;
@@ -574,61 +593,37 @@ public partial class CustomRotation
         return Math.Clamp(mitigated, 0f, 0.95f);
     }
 
-    /// <summary>
-    /// Determines whether any currently casting hostile action is classified as magical.
-    /// </summary>
-    /// <returns>
-    /// True if at least one hostile target is casting an action whose <c>AttackType.RowId == 5</c> (interpreted as magical); otherwise false.
-    /// </returns>
-    /// <remarks>
-    /// Scans all hostile entities with a non-zero <c>CastActionId</c>, looks up the action row, and inspects the attack type.
-    /// Returns early on the first confirmed magical cast.
-    /// If the action sheet cannot be loaded or no valid casts exist, returns false.
-    /// </remarks>
-    public static bool IsMagicalDamageIncoming()
-    {
-        var hostileEnum = AllHostileTargets;
-        if (hostileEnum == null) return false;
+	/// <summary>
+	///
+	/// </summary>
+	[Description("Is an enemy casting magic AOE")]
+	public static bool IsMagicalDamageIncoming => DataCenter.IsMagicalDamageIncoming();
 
-        var actionSheet = Service.GetSheet<Lumina.Excel.Sheets.Action>();
-        if (actionSheet == null) return false;
+	/// <summary>
+	///
+	/// </summary>
+	[Description("Is an enemy casting physical AOE")]
+	public static bool IsPhysicalDamageIncoming => DataCenter.IsPhysicalDamageIncoming();
 
-        foreach (var hostile in hostileEnum)
-        {
-            if (hostile == null) continue;
-            if (hostile.CastActionId == 0) continue;
-
-            var action = actionSheet.GetRow(hostile.CastActionId);
-            if (action.RowId == 0) continue;
-
-            // AttackType row id 5 interpreted as magical.
-            if (action.AttackType.RowId == 5)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /// <summary>
-    ///
-    /// </summary>
-    [Description("Is an enemy casting a multihit AOE party stack")]
+	/// <summary>
+	///
+	/// </summary>
+	[Description("Is an enemy casting a multihit AOE party stack")]
     public static bool IsCastingMultiHit => DataCenter.IsCastingMultiHit();
 
-    #endregion
+	#endregion
 
-    #region Target
-    /// <summary>
-    /// The player's target.
-    /// <br> WARNING: Do not use if there is more than one target, this is not the actions target, it is the players current hard target. Try to use <see cref="IBaseAction.Target"/> or <seealso cref="HostileTarget"/> instead after using this.</br>
-    /// </summary>
-    protected static IBattleChara Target => Svc.Targets.Target is IBattleChara b ? b : Player;
+	#region Target
+	/// <summary>
+	/// The player's target.
+	/// <br> WARNING: Do not use if there is more than one target, this is not the actions target, it is the players current hard target. Try to use <see cref="IBaseAction.Target"/> or <seealso cref="HostileTarget"/> instead after using this.</br>
+	/// </summary>
+	protected static IBattleChara Target => Svc.Targets.Target as IBattleChara ?? Player!;
 
-    /// <summary>
-    /// The player's target, or null if no valid target. (null clears the target)
-    /// </summary>
-    protected static IBattleChara? CurrentTarget => Svc.Targets.Target is IBattleChara b ? b : null;
+	/// <summary>
+	/// The player's target, or null if no valid target. (null clears the target)
+	/// </summary>
+	protected static IBattleChara? CurrentTarget => Svc.Targets.Target is IBattleChara b ? b : null;
 
     /// <summary>
     /// The last attacked hostile target.
@@ -1330,14 +1325,26 @@ public partial class CustomRotation
         return IActionHelper.IsLastAction(ids);
     }
 
-    /// <summary>
-    /// Last used Combo Action.
-    /// <br>WARNING: Do Not make this method the main of your rotation.</br>
-    /// </summary>
-    /// <param name="isAdjust">Check for adjust id not raw id.</param>
-    /// <param name="actions">True if any of this is matched.</param>
-    /// <returns></returns>
-    [Description("Just used Combo Action")]
+	/// <summary>
+	/// Returns the number of seconds since the last action was changed, capped at 10 seconds.
+	/// </summary>
+	public static float TimeSinceLastActionCapped
+	{
+		get
+		{
+			var seconds = (float)TimeSinceLastAction.TotalSeconds;
+			return Math.Min(seconds, 10f);
+		}
+	}
+
+	/// <summary>
+	/// Last used Combo Action.
+	/// <br>WARNING: Do Not make this method the main of your rotation.</br>
+	/// </summary>
+	/// <param name="isAdjust">Check for adjust id not raw id.</param>
+	/// <param name="actions">True if any of this is matched.</param>
+	/// <returns></returns>
+	[Description("Just used Combo Action")]
     public static bool IsLastComboAction(bool isAdjust, params IAction[] actions)
     {
         CountingOfLastUsing++;
@@ -1469,14 +1476,14 @@ public partial class CustomRotation
     /// <br>WARNING: Do Not make this method the main of your rotation.</br>
     /// </summary>
     [Description("How long the player has been alive.")]
-    public static float AliveTime => Player.IsAlive() ? DataCenter.AliveTimeRaw + DataCenter.DefaultGCDRemain : 0;
+    public static float AliveTime => ObjectHelper.PlayerIsAlive() ? DataCenter.AliveTimeRaw + DataCenter.DefaultGCDRemain : 0;
 
     /// <summary>
     /// How long the player has been dead.
     /// <br>WARNING: Do Not make this method the main of your rotation.</br>
     /// </summary>
     [Description("How long the player has been dead.")]
-    public static float DeadTime => Player.IsAlive() ? 0 : DataCenter.DeadTimeRaw + DataCenter.DefaultGCDRemain;
+    public static float DeadTime => ObjectHelper.PlayerIsAlive() ? 0 : DataCenter.DeadTimeRaw + DataCenter.DefaultGCDRemain;
 
     /// <summary>
     /// Time from GCD.
